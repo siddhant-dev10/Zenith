@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+
 import '../core/theme/app_colors.dart';
 import '../models/exposure_category.dart';
 import '../models/privacy_audit_report.dart';
@@ -19,10 +20,7 @@ import 'widgets/risk_meter_gauge.dart';
 class ResultsScreen extends StatelessWidget {
   final PrivacyAuditReport report;
 
-  const ResultsScreen({
-    super.key,
-    required this.report,
-  });
+  const ResultsScreen({super.key, required this.report});
 
   void _openRedactionModal(BuildContext context) {
     showModalBottomSheet(
@@ -43,8 +41,12 @@ class ResultsScreen extends StatelessWidget {
     buffer.writeln('🛡️ ZENITH OPSEC PRIVACY AUDIT REPORT');
     buffer.writeln('=====================================');
     buffer.writeln('Assessment: ${report.title}');
-    buffer.writeln('Overall Risk Score: ${report.overallScore}/100 (${report.riskLevel.label})');
-    buffer.writeln('Scanned: ${DateFormat('yyyy-MM-dd HH:mm').format(report.timestamp)}');
+    buffer.writeln(
+      'Overall Risk Score: ${report.overallScore}/100 (${report.riskLevel.label})',
+    );
+    buffer.writeln(
+      'Scanned: ${DateFormat('yyyy-MM-dd HH:mm').format(report.timestamp)}',
+    );
     buffer.writeln('Summary: ${report.summary}\n');
 
     buffer.writeln('📊 EXPOSURE BREAKDOWN:');
@@ -52,14 +54,22 @@ class ResultsScreen extends StatelessWidget {
       buffer.writeln('• ${entry.key.displayName}: ${entry.value}%');
     }
 
-    buffer.writeln('\n⚠️ IDENTIFIED RISKS (${report.detectedElements.length}):');
+    buffer.writeln(
+      '\n⚠️ IDENTIFIED RISKS (${report.detectedElements.length}):',
+    );
     for (final elem in report.detectedElements) {
-      buffer.writeln('• [${elem.riskLevel.label.toUpperCase()}] ${elem.name}: ${elem.opsecImpact}');
+      buffer.writeln(
+        '• [${elem.riskLevel.label.toUpperCase()}] ${elem.name}: ${elem.opsecImpact}',
+      );
     }
 
-    buffer.writeln('\n🧠 ATTACKER INFERENCES (${report.inferredInsights.length}):');
+    buffer.writeln(
+      '\n🧠 ATTACKER INFERENCES (${report.inferredInsights.length}):',
+    );
     for (final inf in report.inferredInsights) {
-      buffer.writeln('• Visible: "${inf.directObservation}" ➔ Inferred: "${inf.inferredInsight}" (${inf.attackerThreatProfile})');
+      buffer.writeln(
+        '• Visible: "${inf.directObservation}" ➔ Inferred: "${inf.inferredInsight}" (${inf.attackerThreatProfile})',
+      );
     }
 
     buffer.writeln('\n🔒 RECOMMENDATIONS:');
@@ -127,9 +137,10 @@ class ResultsScreen extends StatelessWidget {
                       score: report.overallScore,
                       riskLevel: report.riskLevel,
                       size: 200,
-                    )
-                        .animate()
-                        .scale(duration: 500.ms, curve: Curves.easeOutBack),
+                    ).animate().scale(
+                      duration: 500.ms,
+                      curve: Curves.easeOutBack,
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       report.title,
@@ -137,7 +148,9 @@ class ResultsScreen extends StatelessWidget {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: isDark ? AppColors.textWhite : AppColors.textDark,
+                        color: isDark
+                            ? AppColors.textWhite
+                            : AppColors.textDark,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -227,7 +240,8 @@ class ResultsScreen extends StatelessWidget {
               _buildSectionHeader(
                 icon: Icons.psychology_rounded,
                 title: 'SECURITY INTELLIGENCE & INFERENCES',
-                subtitle: 'What can someone deduce or weaponize from this photo?',
+                subtitle:
+                    'What can someone deduce or weaponize from this photo?',
               ),
               const SizedBox(height: 10),
               if (report.inferredInsights.isEmpty)
@@ -253,7 +267,8 @@ class ResultsScreen extends StatelessWidget {
               _buildSectionHeader(
                 icon: Icons.find_in_page_rounded,
                 title: 'DETECTED ELEMENTS & SENSITIVE DATA',
-                subtitle: '${report.detectedElements.length} direct exposure points identified',
+                subtitle:
+                    '${report.detectedElements.length} direct exposure points identified',
               ),
               const SizedBox(height: 10),
               if (report.detectedElements.isEmpty)

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import 'app_colors.dart';
 
 class AppTheme {
@@ -72,7 +73,9 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.darkCard,
-        contentTextStyle: GoogleFonts.plusJakartaSans(color: AppColors.textWhite),
+        contentTextStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.textWhite,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: AppColors.darkBorder),

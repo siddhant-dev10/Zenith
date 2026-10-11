@@ -1,9 +1,10 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../models/detected_element.dart';
 import '../../models/exposure_category.dart';
@@ -193,7 +194,9 @@ class _AutoRedactPreviewModalState extends State<AutoRedactPreviewModal> {
                                     borderRadius: BorderRadius.circular(4),
                                     child: BackdropFilter(
                                       filter: ImageFilter.blur(
-                                          sigmaX: 18, sigmaY: 18),
+                                        sigmaX: 18,
+                                        sigmaY: 18,
+                                      ),
                                       child: Container(
                                         color: Colors.black.withOpacity(0.4),
                                       ),
@@ -229,7 +232,9 @@ class _AutoRedactPreviewModalState extends State<AutoRedactPreviewModal> {
                           left: 8,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.riskLow.withOpacity(0.9),
                               borderRadius: BorderRadius.circular(6),
@@ -342,7 +347,9 @@ class _AutoRedactPreviewModalState extends State<AutoRedactPreviewModal> {
               _buildFilterChip('Codes & Barcodes', _redactPersonalInfo, (v) {
                 setState(() => _redactPersonalInfo = v);
               }),
-              _buildFilterChip('Vehicles & Transit', _redactTransportation, (v) {
+              _buildFilterChip('Vehicles & Transit', _redactTransportation, (
+                v,
+              ) {
                 setState(() => _redactTransportation = v);
               }),
             ],
@@ -352,8 +359,10 @@ class _AutoRedactPreviewModalState extends State<AutoRedactPreviewModal> {
           // Action Button
           ElevatedButton.icon(
             onPressed: () {
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
               setState(() => _saved = true);
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 const SnackBar(
                   content: Text(
                     'Sanitized photo saved to Photos! Sensitive OPSEC elements redacted.',
@@ -362,7 +371,7 @@ class _AutoRedactPreviewModalState extends State<AutoRedactPreviewModal> {
                 ),
               );
               Future.delayed(const Duration(milliseconds: 700), () {
-                if (mounted) Navigator.pop(context);
+                if (mounted) navigator.pop();
               });
             },
             style: ElevatedButton.styleFrom(
@@ -375,7 +384,9 @@ class _AutoRedactPreviewModalState extends State<AutoRedactPreviewModal> {
               elevation: 0,
             ),
             icon: Icon(
-              _saved ? Icons.check_circle_rounded : Icons.file_download_outlined,
+              _saved
+                  ? Icons.check_circle_rounded
+                  : Icons.file_download_outlined,
               size: 20,
             ),
             label: Text(
@@ -393,7 +404,10 @@ class _AutoRedactPreviewModalState extends State<AutoRedactPreviewModal> {
   }
 
   Widget _buildFilterChip(
-      String label, bool value, ValueChanged<bool> onChanged) {
+    String label,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
     return FilterChip(
       label: Text(label),
       selected: value,

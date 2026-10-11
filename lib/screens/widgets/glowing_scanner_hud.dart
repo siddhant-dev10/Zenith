@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_colors.dart';
 
 class GlowingScannerHud extends StatefulWidget {
@@ -88,9 +90,13 @@ class _ScannerHudPainter extends CustomPainter {
       stops: const [0.0, 0.7, 1.0],
     );
 
-    final beamRect = Rect.fromLTRB(0, math.max(0, scanY - 50), size.width, scanY);
-    final beamPaint = Paint()
-      ..shader = beamGradient.createShader(beamRect);
+    final beamRect = Rect.fromLTRB(
+      0,
+      math.max(0, scanY - 50),
+      size.width,
+      scanY,
+    );
+    final beamPaint = Paint()..shader = beamGradient.createShader(beamRect);
     canvas.drawRect(beamRect, beamPaint);
 
     // Sharp glowing horizontal laser line
@@ -153,8 +159,16 @@ class _ScannerHudPainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
     canvas.drawCircle(center, 30, reticlePaint);
-    canvas.drawLine(Offset(center.dx - 40, center.dy), Offset(center.dx + 40, center.dy), reticlePaint);
-    canvas.drawLine(Offset(center.dx, center.dy - 40), Offset(center.dx, center.dy + 40), reticlePaint);
+    canvas.drawLine(
+      Offset(center.dx - 40, center.dy),
+      Offset(center.dx + 40, center.dy),
+      reticlePaint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy - 40),
+      Offset(center.dx, center.dy + 40),
+      reticlePaint,
+    );
   }
 
   @override

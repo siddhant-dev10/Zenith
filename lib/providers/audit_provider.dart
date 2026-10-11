@@ -1,8 +1,7 @@
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+
 import '../models/privacy_audit_report.dart';
 import '../services/gemini_vision_service.dart';
 import '../services/mock_analysis_service.dart';
@@ -103,12 +102,15 @@ class AuditState {
   }) {
     return AuditState(
       status: status ?? this.status,
-      selectedImagePath:
-          clearImage ? null : (selectedImagePath ?? this.selectedImagePath),
-      selectedImageBytes:
-          clearImage ? null : (selectedImageBytes ?? this.selectedImageBytes),
-      selectedSampleAsset:
-          clearImage ? null : (selectedSampleAsset ?? this.selectedSampleAsset),
+      selectedImagePath: clearImage
+          ? null
+          : (selectedImagePath ?? this.selectedImagePath),
+      selectedImageBytes: clearImage
+          ? null
+          : (selectedImageBytes ?? this.selectedImageBytes),
+      selectedSampleAsset: clearImage
+          ? null
+          : (selectedSampleAsset ?? this.selectedSampleAsset),
       currentReport: currentReport ?? this.currentReport,
       history: history ?? this.history,
       errorMessage: errorMessage,
@@ -117,8 +119,9 @@ class AuditState {
   }
 }
 
-final auditProvider =
-    NotifierProvider<AuditNotifier, AuditState>(AuditNotifier.new);
+final auditProvider = NotifierProvider<AuditNotifier, AuditState>(
+  AuditNotifier.new,
+);
 
 class AuditNotifier extends Notifier<AuditState> {
   final ImagePicker _picker = ImagePicker();
@@ -148,9 +151,7 @@ class AuditNotifier extends Notifier<AuditState> {
         errorMessage: null,
       );
     } catch (e) {
-      state = state.copyWith(
-        errorMessage: 'Failed to load sample image: $e',
-      );
+      state = state.copyWith(errorMessage: 'Failed to load sample image: $e');
     }
   }
 
@@ -174,7 +175,8 @@ class AuditNotifier extends Notifier<AuditState> {
       }
     } catch (e) {
       state = state.copyWith(
-        errorMessage: 'Camera error: $e. You can also pick from gallery or test samples.',
+        errorMessage:
+            'Camera error: $e. You can also pick from gallery or test samples.',
       );
     }
   }
@@ -198,9 +200,7 @@ class AuditNotifier extends Notifier<AuditState> {
         );
       }
     } catch (e) {
-      state = state.copyWith(
-        errorMessage: 'Gallery picker error: $e.',
-      );
+      state = state.copyWith(errorMessage: 'Gallery picker error: $e.');
     }
   }
 
@@ -223,10 +223,7 @@ class AuditNotifier extends Notifier<AuditState> {
   }
 
   void setCurrentReport(PrivacyAuditReport report) {
-    state = state.copyWith(
-      currentReport: report,
-      status: ScanStatus.completed,
-    );
+    state = state.copyWith(currentReport: report, status: ScanStatus.completed);
   }
 
   Future<PrivacyAuditReport?> runAnalysis() async {

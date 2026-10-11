@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../models/inferred_insight.dart';
 import 'cyber_glass_card.dart';
@@ -7,10 +8,7 @@ import 'cyber_glass_card.dart';
 class InferenceCard extends StatelessWidget {
   final InferredInsight insight;
 
-  const InferenceCard({
-    super.key,
-    required this.insight,
-  });
+  const InferenceCard({super.key, required this.insight});
 
   @override
   Widget build(BuildContext context) {
@@ -38,8 +36,11 @@ class InferenceCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.psychology_alt_rounded,
-                        size: 14, color: Colors.white),
+                    const Icon(
+                      Icons.psychology_alt_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'ATTACKER INFERENCE',
@@ -59,9 +60,7 @@ class InferenceCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: severityColor.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: severityColor.withOpacity(0.35),
-                  ),
+                  border: Border.all(color: severityColor.withOpacity(0.35)),
                 ),
                 child: Text(
                   insight.severity.label.toUpperCase(),
@@ -116,7 +115,9 @@ class InferenceCard extends StatelessWidget {
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? AppColors.textWhite : AppColors.textDark,
+                          color: isDark
+                              ? AppColors.textWhite
+                              : AppColors.textDark,
                         ),
                       ),
                     ],
@@ -193,7 +194,9 @@ class InferenceCard extends StatelessWidget {
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: isDark ? AppColors.textWhite : AppColors.textDark,
+                          color: isDark
+                              ? AppColors.textWhite
+                              : AppColors.textDark,
                         ),
                       ),
                     ],
@@ -211,9 +214,7 @@ class InferenceCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.riskHighBg.withOpacity(0.4),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: AppColors.riskHigh.withOpacity(0.2),
-              ),
+              border: Border.all(color: AppColors.riskHigh.withOpacity(0.2)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,7 +243,9 @@ class InferenceCard extends StatelessWidget {
                         insight.attackerThreatProfile,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
-                          color: isDark ? AppColors.textLight : AppColors.textDark,
+                          color: isDark
+                              ? AppColors.textLight
+                              : AppColors.textDark,
                           height: 1.35,
                         ),
                       ),

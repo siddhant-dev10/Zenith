@@ -651,16 +651,18 @@ This formula possesses essential mathematical properties:
 3. **Severe Dominance:** A single critical finding ($R = 95$) guarantees a critical category score regardless of other elements.
 
 #### 4. Unified Overall Risk Score ($\Omega$)
-The overall system risk score synthesizes the peak category vulnerability with compound cross-category risk:
+The overall system risk score synthesizes the peak category vulnerability with compound cross-category breadth and contextual threat deductions:
 
-$$\Omega = \min\left(100, \; \alpha \cdot \max_{c}(CS_c) + (1 - \alpha) \cdot \left[ \frac{1}{|C|} \sum_{c=1}^{5} CS_c \right] + \Gamma(I)\right)$$
+$$\Omega = \min\left(100, \; \max_{c}(CS_c) + \beta \sum_{c \neq \text{peak}} CS_c + \Gamma(I)\right)$$
 
 Where:
-- $\alpha = 0.70$: **Dominance Coefficient**. Ensures a single severe breach (e.g., exposed password) drives the score into the Critical tier even if all other 4 categories are zero.
-- $(1 - \alpha) = 0.30$: **Aggregate Breadth Coefficient**. Accounts for diffuse exposure across multiple domains.
-- $\Gamma(I) \in [0, 15]$: **Inference Synergy Amplifier**. Additional penalty added when the Inference Engine detects cross-domain correlation (e.g., Badge + Building + Calendar):
+- $\max_{c}(CS_c)$: **Peak Category Anchor**. Guarantees that a system's overall exposure is at minimum as severe as its single worst compromised domain, preventing severe vulnerabilities from being mathematically diluted by non-exposed domains.
+- $\beta = 0.12$: **Secondary Breadth Coefficient**. Imposes a compound penalty when multiple independent threat surfaces are simultaneously compromised.
+- $\Gamma(I) \in [0, 15]$: **Inference Synergy Amplifier**. Additional penalty added when the Inference Engine detects cross-domain correlation:
 
 $$\Gamma(I) = \min\left(15, \; \sum_{i_j \in I} 5.0 \times C(i_j)\right)$$
+
+- **Critical Credential Floor:** If any individual finding $f_k$ exhibits standalone risk $R(f_k) \ge 90$ (e.g., unmasked AWS secret key, plaintext credentials, or unredacted payment PAN), an overall floor of $\Omega \ge 90$ is strictly enforced.
 
 ### 11.2 Calibrated Severity Thresholds
 The continuous score $\Omega$ maps deterministically into four calibrated operational bands:

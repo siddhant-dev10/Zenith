@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../core/constants/app_constants.dart';
 import '../core/theme/app_colors.dart';
 import '../providers/settings_provider.dart';
@@ -106,21 +107,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.bolt_rounded,
-                          size: 18, color: AppColors.primaryCyan),
+                      const Icon(
+                        Icons.bolt_rounded,
+                        size: 18,
+                        color: AppColors.primaryCyan,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Google Gemini Vision API',
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: isDark ? AppColors.textWhite : AppColors.textDark,
+                          color: isDark
+                              ? AppColors.textWhite
+                              : AppColors.textDark,
                         ),
                       ),
                       const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: settings.hasApiKey
                               ? AppColors.riskLow.withOpacity(0.15)
@@ -227,8 +235,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ElevatedButton.icon(
                         onPressed: _isTestingKey ? null : _testApiKey,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              AppColors.primaryCyan.withOpacity(0.18),
+                          backgroundColor: AppColors.primaryCyan.withOpacity(
+                            0.18,
+                          ),
                           foregroundColor: AppColors.primaryCyan,
                           elevation: 0,
                           side: const BorderSide(
@@ -239,7 +248,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
                         ),
                         icon: _isTestingKey
                             ? const SizedBox(
@@ -250,8 +261,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   color: AppColors.primaryCyan,
                                 ),
                               )
-                            : const Icon(Icons.network_check_rounded,
-                                size: 16),
+                            : const Icon(Icons.network_check_rounded, size: 16),
                         label: Text(
                           _isTestingKey ? 'Verifying...' : 'Test Connection',
                           style: GoogleFonts.jetBrainsMono(
@@ -433,8 +443,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           color: AppColors.primaryCyan.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.shield_outlined,
-                            size: 18, color: AppColors.primaryCyan),
+                        child: const Icon(
+                          Icons.shield_outlined,
+                          size: 18,
+                          color: AppColors.primaryCyan,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -442,7 +455,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: isDark ? AppColors.textWhite : AppColors.textDark,
+                          color: isDark
+                              ? AppColors.textWhite
+                              : AppColors.textDark,
                         ),
                       ),
                     ],
@@ -510,8 +525,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     title,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 14,
-                      fontWeight:
-                          isSelected ? FontWeight.w800 : FontWeight.w600,
+                      fontWeight: isSelected
+                          ? FontWeight.w800
+                          : FontWeight.w600,
                       color: isDark ? AppColors.textWhite : AppColors.textDark,
                     ),
                   ),

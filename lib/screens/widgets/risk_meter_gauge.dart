@@ -1,6 +1,8 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../models/risk_level.dart';
 
@@ -94,15 +96,14 @@ class RiskMeterGauge extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: color.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: color.withOpacity(0.4),
-                      width: 1,
-                    ),
+                    border: Border.all(color: color.withOpacity(0.4), width: 1),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../models/recommendation.dart';
 import 'cyber_glass_card.dart';
@@ -94,7 +95,9 @@ class _RecommendationCardState extends State<RecommendationCard> {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: priorityColor.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(4),
@@ -111,7 +114,9 @@ class _RecommendationCardState extends State<RecommendationCard> {
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.06),
                         borderRadius: BorderRadius.circular(4),
@@ -132,8 +137,7 @@ class _RecommendationCardState extends State<RecommendationCard> {
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    decoration:
-                        _completed ? TextDecoration.lineThrough : null,
+                    decoration: _completed ? TextDecoration.lineThrough : null,
                     color: _completed
                         ? AppColors.textMuted
                         : (isDark ? AppColors.textWhite : AppColors.textDark),
@@ -144,7 +148,9 @@ class _RecommendationCardState extends State<RecommendationCard> {
                   rec.action,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
-                    color: isDark ? AppColors.textLight : AppColors.textDarkMuted,
+                    color: isDark
+                        ? AppColors.textLight
+                        : AppColors.textDarkMuted,
                     height: 1.35,
                   ),
                 ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../core/constants/app_constants.dart';
 import '../core/theme/app_colors.dart';
 import 'home_screen.dart';
@@ -64,16 +65,16 @@ class _SplashScreenState extends State<SplashScreen> {
                   alignment: Alignment.center,
                   children: [
                     Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.primaryCyan.withOpacity(0.3),
-                          width: 1.5,
-                        ),
-                      ),
-                    )
+                          width: 140,
+                          height: 140,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.primaryCyan.withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                        )
                         .animate(onPlay: (controller) => controller.repeat())
                         .scale(
                           begin: const Offset(0.8, 0.8),
@@ -82,34 +83,34 @@ class _SplashScreenState extends State<SplashScreen> {
                         )
                         .fadeOut(duration: 2.seconds),
                     Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            AppColors.primaryCyan,
-                            AppColors.accentIndigo,
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primaryCyan.withOpacity(0.4),
-                            blurRadius: 28,
-                            spreadRadius: 2,
+                          width: 96,
+                          height: 96,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                AppColors.primaryCyan,
+                                AppColors.accentIndigo,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primaryCyan.withOpacity(0.4),
+                                blurRadius: 28,
+                                spreadRadius: 2,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.security_rounded,
-                          size: 50,
-                          color: Colors.white,
-                        ),
-                      ),
-                    )
+                          child: const Center(
+                            child: Icon(
+                              Icons.security_rounded,
+                              size: 50,
+                              color: Colors.white,
+                            ),
+                          ),
+                        )
                         .animate()
                         .scale(duration: 600.ms, curve: Curves.easeOutBack)
                         .shimmer(delay: 800.ms, duration: 1.seconds),
@@ -119,14 +120,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
                 // App Brand
                 Text(
-                  AppConstants.appName.toUpperCase(),
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 6.0,
-                    color: Colors.white,
-                  ),
-                )
+                      AppConstants.appName.toUpperCase(),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 6.0,
+                        color: Colors.white,
+                      ),
+                    )
                     .animate()
                     .fadeIn(delay: 400.ms, duration: 600.ms)
                     .slideY(begin: 0.2, end: 0),
@@ -135,18 +136,18 @@ class _SplashScreenState extends State<SplashScreen> {
 
                 // Tagline
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Text(
-                    AppConstants.tagline,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textMuted,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                )
+                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      child: Text(
+                        AppConstants.tagline,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textMuted,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    )
                     .animate()
                     .fadeIn(delay: 600.ms, duration: 600.ms)
                     .slideY(begin: 0.2, end: 0),
@@ -155,8 +156,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
                 // Subtle OPSEC loading indicator
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(20),
@@ -169,13 +172,13 @@ class _SplashScreenState extends State<SplashScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primaryCyan,
-                          shape: BoxShape.circle,
-                        ),
-                      )
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: AppColors.primaryCyan,
+                              shape: BoxShape.circle,
+                            ),
+                          )
                           .animate(onPlay: (c) => c.repeat(reverse: true))
                           .scale(duration: 800.ms),
                       const SizedBox(width: 8),
@@ -190,9 +193,7 @@ class _SplashScreenState extends State<SplashScreen> {
                       ),
                     ],
                   ),
-                )
-                    .animate()
-                    .fadeIn(delay: 800.ms, duration: 500.ms),
+                ).animate().fadeIn(delay: 800.ms, duration: 500.ms),
               ],
             ),
           ),

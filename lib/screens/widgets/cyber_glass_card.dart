@@ -1,5 +1,7 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_colors.dart';
 
 class CyberGlassCard extends StatelessWidget {
@@ -32,9 +34,7 @@ class CyberGlassCard extends StatelessWidget {
     final defaultBg = isDark
         ? AppColors.darkCard.withOpacity(0.75)
         : AppColors.lightSurface.withOpacity(0.9);
-    final defaultBorder = isDark
-        ? AppColors.darkBorder
-        : AppColors.lightBorder;
+    final defaultBorder = isDark ? AppColors.darkBorder : AppColors.lightBorder;
 
     Widget content = Container(
       width: width,
@@ -43,10 +43,7 @@ class CyberGlassCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor ?? defaultBg,
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(
-          color: borderColor ?? defaultBorder,
-          width: 1,
-        ),
+        border: Border.all(color: borderColor ?? defaultBorder, width: 1),
         boxShadow: [
           BoxShadow(
             color: isDark

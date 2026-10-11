@@ -7,14 +7,12 @@ import 'package:zenith/screens/results_screen.dart';
 import 'package:zenith/services/sample_data_service.dart';
 
 void main() {
-  testWidgets('HomeScreen renders OPSEC radar and primary actions',
-      (WidgetTester tester) async {
+  testWidgets('HomeScreen renders OPSEC radar and primary actions', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
-          theme: AppTheme.darkTheme,
-          home: const HomeScreen(),
-        ),
+        child: MaterialApp(theme: AppTheme.darkTheme, home: const HomeScreen()),
       ),
     );
 
@@ -27,8 +25,9 @@ void main() {
     expect(find.text('TEST THREAT SCENARIOS'), findsOneWidget);
   });
 
-  testWidgets('ResultsScreen displays risk meter and inferred insights',
-      (WidgetTester tester) async {
+  testWidgets('ResultsScreen displays risk meter and inferred insights', (
+    WidgetTester tester,
+  ) async {
     final report = SampleDataService.getScenarios().first.report;
 
     await tester.pumpWidget(

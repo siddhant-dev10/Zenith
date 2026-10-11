@@ -1,8 +1,9 @@
 import 'dart:io';
-import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../models/detected_element.dart';
 import 'cyber_glass_card.dart';
@@ -57,7 +58,11 @@ class _ImageInspectionOverlayState extends State<ImageInspectionOverlay> {
         height: 240,
         color: Colors.black26,
         child: const Center(
-          child: Icon(Icons.broken_image_rounded, size: 48, color: Colors.white24),
+          child: Icon(
+            Icons.broken_image_rounded,
+            size: 48,
+            color: Colors.white24,
+          ),
         ),
       );
     }
@@ -109,7 +114,9 @@ class _ImageInspectionOverlayState extends State<ImageInspectionOverlay> {
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: _showMarkers
                           ? AppColors.primaryCyan.withOpacity(0.2)
@@ -192,7 +199,8 @@ class _ImageInspectionOverlayState extends State<ImageInspectionOverlay> {
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: color.withOpacity(
-                                      isSelected ? 0.28 : 0.12),
+                                    isSelected ? 0.28 : 0.12,
+                                  ),
                                   border: Border.all(
                                     color: color,
                                     width: isSelected ? 2.5 : 1.5,
@@ -209,7 +217,9 @@ class _ImageInspectionOverlayState extends State<ImageInspectionOverlay> {
                                   alignment: Alignment.topLeft,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 4, vertical: 1),
+                                      horizontal: 4,
+                                      vertical: 1,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: color,
                                       borderRadius: const BorderRadius.only(
@@ -264,7 +274,9 @@ class _ImageInspectionOverlayState extends State<ImageInspectionOverlay> {
                           right: 12,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.darkBg.withOpacity(0.92),
                               borderRadius: BorderRadius.circular(10),
@@ -312,8 +324,11 @@ class _ImageInspectionOverlayState extends State<ImageInspectionOverlay> {
                                 IconButton(
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(),
-                                  icon: const Icon(Icons.close_rounded,
-                                      size: 16, color: Colors.white70),
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 16,
+                                    color: Colors.white70,
+                                  ),
                                   onPressed: () =>
                                       setState(() => _selectedElement = null),
                                 ),
@@ -365,7 +380,8 @@ class _ImageInspectionOverlayState extends State<ImageInspectionOverlay> {
 }
 
 class _ReticleCorner extends StatelessWidget {
-  final int rotation; // 0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left
+  final int
+  rotation; // 0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left
 
   const _ReticleCorner({required this.rotation});
 
@@ -376,9 +392,7 @@ class _ReticleCorner extends StatelessWidget {
       child: SizedBox(
         width: 14,
         height: 14,
-        child: CustomPaint(
-          painter: _ReticlePainter(),
-        ),
+        child: CustomPaint(painter: _ReticlePainter()),
       ),
     );
   }

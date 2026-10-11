@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../core/constants/app_constants.dart';
 import '../models/privacy_audit_report.dart';
 import '../models/risk_level.dart';
@@ -18,8 +20,10 @@ class StorageService {
     final prefs = await _instance;
     final apiKey = prefs.getString(AppConstants.keyApiKey) ?? '';
     final model =
-        prefs.getString(AppConstants.keyModel) ?? AppConstants.defaultGeminiModel;
-    final sensitivity = prefs.getString(AppConstants.keySensitivity) ??
+        prefs.getString(AppConstants.keyModel) ??
+        AppConstants.defaultGeminiModel;
+    final sensitivity =
+        prefs.getString(AppConstants.keySensitivity) ??
         AppConstants.sensitivityBalanced;
     final useMock = prefs.getBool(AppConstants.keyUseMockFallback) ?? true;
     final theme = prefs.getString(AppConstants.keyThemeMode) ?? 'dark';
@@ -38,7 +42,10 @@ class StorageService {
     await prefs.setString(AppConstants.keyApiKey, settings.apiKey);
     await prefs.setString(AppConstants.keyModel, settings.model);
     await prefs.setString(AppConstants.keySensitivity, settings.sensitivity);
-    await prefs.setBool(AppConstants.keyUseMockFallback, settings.useMockFallback);
+    await prefs.setBool(
+      AppConstants.keyUseMockFallback,
+      settings.useMockFallback,
+    );
     await prefs.setString(AppConstants.keyThemeMode, settings.themeMode);
   }
 
@@ -99,11 +106,13 @@ class StorageService {
     }
 
     final total = history.length;
-    final critical =
-        history.where((r) => r.riskLevel == RiskLevel.critical).length;
+    final critical = history
+        .where((r) => r.riskLevel == RiskLevel.critical)
+        .length;
     final high = history.where((r) => r.riskLevel == RiskLevel.high).length;
     final avgScore =
-        (history.map((r) => r.overallScore).reduce((a, b) => a + b) / total).round();
+        (history.map((r) => r.overallScore).reduce((a, b) => a + b) / total)
+            .round();
 
     return {
       'totalAudits': total,

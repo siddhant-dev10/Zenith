@@ -1,8 +1,10 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../core/theme/app_colors.dart';
 import '../providers/audit_provider.dart';
 import '../services/sample_data_service.dart';
@@ -122,13 +124,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
               children: [
                 // Top Action Bar
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded,
-                            color: Colors.white),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white,
+                        ),
                         onPressed: () => Navigator.pop(context),
                       ),
                       const Spacer(),
@@ -142,8 +148,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                               ? AppColors.primaryCyan
                               : Colors.white70,
                         ),
-                        onPressed: () =>
-                            setState(() => _flashOn = !_flashOn),
+                        onPressed: () => setState(() => _flashOn = !_flashOn),
                       ),
                       // Grid Toggle
                       IconButton(
@@ -155,19 +160,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                               ? AppColors.primaryCyan
                               : Colors.white70,
                         ),
-                        onPressed: () =>
-                            setState(() => _gridOn = !_gridOn),
+                        onPressed: () => setState(() => _gridOn = !_gridOn),
                       ),
                       // Preset Scenario Quick Picker
                       PopupMenuButton<SampleScenario>(
-                        icon: const Icon(Icons.auto_awesome_rounded,
-                            color: Colors.white70),
+                        icon: const Icon(
+                          Icons.auto_awesome_rounded,
+                          color: Colors.white70,
+                        ),
                         tooltip: 'Load Sample Scenario',
                         color: AppColors.darkSurface,
                         onSelected: (sc) {
-                          ref
-                              .read(auditProvider.notifier)
-                              .selectSample(sc);
+                          ref.read(auditProvider.notifier).selectSample(sc);
                         },
                         itemBuilder: (context) {
                           return SampleDataService.getScenarios().map((sc) {
@@ -210,9 +214,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
 
                             // Grid Lines Overlay
                             if (_gridOn)
-                              CustomPaint(
-                                painter: _ViewfinderGridPainter(),
-                              ),
+                              CustomPaint(painter: _ViewfinderGridPainter()),
 
                             // Cyber Brackets in Corners
                             const Positioned(
@@ -244,7 +246,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                               child: Center(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.black.withOpacity(0.7),
                                     borderRadius: BorderRadius.circular(20),
@@ -295,7 +299,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                 // Bottom Controls Bar
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 20),
+                    horizontal: 24,
+                    vertical: 20,
+                  ),
                   child: hasImage
                       ? _buildConfirmControls()
                       : _buildCaptureControls(),
@@ -314,8 +320,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
       children: [
         // Gallery Button
         IconButton(
-          icon: const Icon(Icons.photo_library_rounded,
-              size: 28, color: Colors.white),
+          icon: const Icon(
+            Icons.photo_library_rounded,
+            size: 28,
+            color: Colors.white,
+          ),
           tooltip: 'Upload from Gallery',
           onPressed: _pickGallery,
         ),
@@ -337,20 +346,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                   colors: [AppColors.primaryCyan, AppColors.accentIndigo],
                 ),
               ),
-              child: const Icon(Icons.camera_alt_rounded,
-                  color: Colors.white, size: 30),
+              child: const Icon(
+                Icons.camera_alt_rounded,
+                color: Colors.white,
+                size: 30,
+              ),
             ),
           ),
         ),
         // Quick Scenario Sample
         IconButton(
-          icon: const Icon(Icons.filter_hdr_rounded,
-              size: 28, color: Colors.white),
+          icon: const Icon(
+            Icons.filter_hdr_rounded,
+            size: 28,
+            color: Colors.white,
+          ),
           tooltip: 'Test Student ID Scenario',
           onPressed: () {
-            ref.read(auditProvider.notifier).selectSample(
-                  SampleDataService.getScenarios().first,
-                );
+            ref
+                .read(auditProvider.notifier)
+                .selectSample(SampleDataService.getScenarios().first);
           },
         ),
       ],
@@ -454,9 +469,7 @@ class _ViewfinderCorner extends StatelessWidget {
       child: SizedBox(
         width: 18,
         height: 18,
-        child: CustomPaint(
-          painter: _CornerPainter(),
-        ),
+        child: CustomPaint(painter: _CornerPainter()),
       ),
     );
   }

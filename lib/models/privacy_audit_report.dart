@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'detected_element.dart';
 import 'exposure_category.dart';
 import 'inferred_insight.dart';
@@ -22,6 +23,10 @@ class PrivacyAuditReport {
   final Map<String, dynamic> exifMetadata;
   final bool isLiveAi;
   final int scanDurationMs;
+  final String
+  processingStatus; // 'completed', 'degraded', 'partial_failure', 'failed'
+  final List<String> analysisLimitations;
+  final List<String> processingErrors;
 
   const PrivacyAuditReport({
     required this.id,
@@ -40,6 +45,9 @@ class PrivacyAuditReport {
     this.exifMetadata = const {},
     this.isLiveAi = false,
     this.scanDurationMs = 1200,
+    this.processingStatus = 'completed',
+    this.analysisLimitations = const [],
+    this.processingErrors = const [],
   });
 
   PrivacyAuditReport copyWith({
@@ -59,6 +67,9 @@ class PrivacyAuditReport {
     Map<String, dynamic>? exifMetadata,
     bool? isLiveAi,
     int? scanDurationMs,
+    String? processingStatus,
+    List<String>? analysisLimitations,
+    List<String>? processingErrors,
   }) {
     return PrivacyAuditReport(
       id: id ?? this.id,
@@ -77,6 +88,9 @@ class PrivacyAuditReport {
       exifMetadata: exifMetadata ?? this.exifMetadata,
       isLiveAi: isLiveAi ?? this.isLiveAi,
       scanDurationMs: scanDurationMs ?? this.scanDurationMs,
+      processingStatus: processingStatus ?? this.processingStatus,
+      analysisLimitations: analysisLimitations ?? this.analysisLimitations,
+      processingErrors: processingErrors ?? this.processingErrors,
     );
   }
 
@@ -97,6 +111,9 @@ class PrivacyAuditReport {
       'exifMetadata': exifMetadata,
       'isLiveAi': isLiveAi,
       'scanDurationMs': scanDurationMs,
+      'processingStatus': processingStatus,
+      'analysisLimitations': analysisLimitations,
+      'processingErrors': processingErrors,
     };
   }
 
@@ -104,12 +121,14 @@ class PrivacyAuditReport {
     final catScoresRaw = json['categoryScores'] as Map<String, dynamic>? ?? {};
     final catScores = <ExposureCategory, int>{};
     for (final entry in catScoresRaw.entries) {
-      catScores[ExposureCategory.fromString(entry.key)] =
-          (entry.value as num).toInt();
+      catScores[ExposureCategory.fromString(entry.key)] = (entry.value as num)
+          .toInt();
     }
 
     return PrivacyAuditReport(
-      id: json['id'] as String? ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      id:
+          json['id'] as String? ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
       timestamp: json['timestamp'] != null
           ? DateTime.tryParse(json['timestamp'] as String) ?? DateTime.now()
           : DateTime.now(),
@@ -132,6 +151,13 @@ class PrivacyAuditReport {
       exifMetadata: (json['exifMetadata'] as Map<String, dynamic>?) ?? {},
       isLiveAi: json['isLiveAi'] as bool? ?? false,
       scanDurationMs: (json['scanDurationMs'] as num?)?.toInt() ?? 1200,
+      processingStatus: json['processingStatus'] as String? ?? 'completed',
+      analysisLimitations: (json['analysisLimitations'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      processingErrors: (json['processingErrors'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+
 import '../core/theme/app_colors.dart';
 import '../models/privacy_audit_report.dart';
 import '../models/risk_level.dart';
@@ -75,31 +76,38 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     color: AppColors.textMuted,
                     fontSize: 13,
                   ),
-                  prefixIcon: const Icon(Icons.search,
-                      size: 20, color: AppColors.textMuted),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    size: 20,
+                    color: AppColors.textMuted,
+                  ),
                   filled: true,
                   fillColor: isDark
                       ? AppColors.darkSurface
                       : AppColors.lightSurface,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(
-                      color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                      color: isDark
+                          ? AppColors.darkBorder
+                          : AppColors.lightBorder,
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(
-                      color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                      color: isDark
+                          ? AppColors.darkBorder
+                          : AppColors.lightBorder,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: AppColors.primaryCyan,
-                    ),
+                    borderSide: const BorderSide(color: AppColors.primaryCyan),
                   ),
                 ),
               ),
@@ -153,7 +161,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   : ListView.builder(
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 8),
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         final report = filtered[index];
@@ -197,9 +207,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         onTap: () {
           ref.read(auditProvider.notifier).setCurrentReport(report);
           Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ResultsScreen(report: report),
-            ),
+            MaterialPageRoute(builder: (_) => ResultsScreen(report: report)),
           );
         },
         child: Row(
@@ -246,7 +254,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: riskColor.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(4),
@@ -292,10 +302,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 ],
               ),
             ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textMuted,
-            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
           ],
         ),
       ),
@@ -361,7 +368,11 @@ class SliverFilterBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       child: Row(
         children: [
-          _buildChip('All', selectedFilter == null, () => onFilterChanged(null)),
+          _buildChip(
+            'All',
+            selectedFilter == null,
+            () => onFilterChanged(null),
+          ),
           const SizedBox(width: 8),
           _buildChip(
             'Critical',
@@ -395,8 +406,12 @@ class SliverFilterBar extends StatelessWidget {
     );
   }
 
-  Widget _buildChip(String label, bool isSelected, VoidCallback onTap,
-      {Color? color}) {
+  Widget _buildChip(
+    String label,
+    bool isSelected,
+    VoidCallback onTap, {
+    Color? color,
+  }) {
     final activeColor = color ?? AppColors.primaryCyan;
 
     return FilterChip(
@@ -406,9 +421,7 @@ class SliverFilterBar extends StatelessWidget {
       selectedColor: activeColor.withOpacity(0.2),
       checkmarkColor: activeColor,
       backgroundColor: Colors.white.withOpacity(0.04),
-      side: BorderSide(
-        color: isSelected ? activeColor : AppColors.darkBorder,
-      ),
+      side: BorderSide(color: isSelected ? activeColor : AppColors.darkBorder),
       labelStyle: GoogleFonts.jetBrainsMono(
         fontSize: 11,
         fontWeight: FontWeight.w700,

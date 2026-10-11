@@ -34,18 +34,19 @@ class UserSettings {
   }
 
   Map<String, dynamic> toJson() => {
-        'apiKey': apiKey,
-        'model': model,
-        'sensitivity': sensitivity,
-        'useMockFallback': useMockFallback,
-        'themeMode': themeMode,
-      };
+    'apiKey': apiKey,
+    'model': model,
+    'sensitivity': sensitivity,
+    'useMockFallback': useMockFallback,
+    'themeMode': themeMode,
+  };
 
   factory UserSettings.fromJson(Map<String, dynamic> json) {
     return UserSettings(
       apiKey: json['apiKey'] as String? ?? '',
       model: json['model'] as String? ?? AppConstants.defaultGeminiModel,
-      sensitivity: json['sensitivity'] as String? ?? AppConstants.sensitivityBalanced,
+      sensitivity:
+          json['sensitivity'] as String? ?? AppConstants.sensitivityBalanced,
       useMockFallback: json['useMockFallback'] as bool? ?? true,
       themeMode: json['themeMode'] as String? ?? 'dark',
     );

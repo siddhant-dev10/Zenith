@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../models/detected_element.dart';
 import 'cyber_glass_card.dart';
@@ -59,7 +60,9 @@ class _DetectedElementTileState extends State<DetectedElementTile> {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: isDark ? AppColors.textWhite : AppColors.textDark,
+                        color: isDark
+                            ? AppColors.textWhite
+                            : AppColors.textDark,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -70,7 +73,9 @@ class _DetectedElementTileState extends State<DetectedElementTile> {
                         // Category Pill
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: elem.category.color.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -90,7 +95,9 @@ class _DetectedElementTileState extends State<DetectedElementTile> {
                         // Risk Pill
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: riskColor.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -110,7 +117,9 @@ class _DetectedElementTileState extends State<DetectedElementTile> {
                         // Confidence Pill
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.06),
                             borderRadius: BorderRadius.circular(6),
@@ -157,9 +166,7 @@ class _DetectedElementTileState extends State<DetectedElementTile> {
               decoration: BoxDecoration(
                 color: AppColors.riskHighBg.withOpacity(0.4),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.riskHigh.withOpacity(0.2),
-                ),
+                border: Border.all(color: AppColors.riskHigh.withOpacity(0.2)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

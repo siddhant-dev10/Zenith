@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+
 import '../core/constants/app_constants.dart';
+import '../core/privacy_engine/testing/test_case_framework.dart';
 import '../core/theme/app_colors.dart';
 import '../models/privacy_audit_report.dart';
 import '../providers/audit_provider.dart';
@@ -33,14 +34,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _navigateToAnalysis() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AnalysisScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const AnalysisScreen()));
   }
 
   void _testSample(SampleScenario scenario) {
     ref.read(auditProvider.notifier).selectSample(scenario);
     _navigateToAnalysis();
+  }
+
+  void _showBenchmarkModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const BenchmarkSuiteModal(),
+    );
   }
 
   @override
@@ -64,8 +73,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Top App Bar
             SliverToBoxAdapter(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     Container(
@@ -87,8 +98,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                       child: const Center(
-                        child: Icon(Icons.security_rounded,
-                            size: 22, color: Colors.white),
+                        child: Icon(
+                          Icons.security_rounded,
+                          size: 22,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -112,7 +126,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: AppColors.riskLow.withOpacity(0.15),
                                   borderRadius: BorderRadius.circular(6),
@@ -121,7 +137,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   ),
                                 ),
                                 child: Text(
-                                  settings.hasApiKey ? 'LIVE AI' : 'OPSEC ENGINE',
+                                  settings.hasApiKey
+                                      ? 'LIVE AI'
+                                      : 'OPSEC ENGINE',
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 9,
                                     fontWeight: FontWeight.w800,
@@ -149,9 +167,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                              builder: (_) => const HistoryScreen()),
+                            builder: (_) => const HistoryScreen(),
+                          ),
                         );
                       },
+                    ),
+                    // Benchmark Suite Icon
+                    IconButton(
+                      icon: const Icon(Icons.rule_folder_rounded),
+                      color: isDark ? AppColors.textLight : AppColors.textDark,
+                      tooltip: 'Evaluation Benchmark Suite',
+                      onPressed: () => _showBenchmarkModal(context),
                     ),
                     // Settings Icon
                     IconButton(
@@ -161,7 +187,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                              builder: (_) => const SettingsScreen()),
+                            builder: (_) => const SettingsScreen(),
+                          ),
                         );
                       },
                     ),
@@ -173,8 +200,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Hero Banner & Stats
             SliverToBoxAdapter(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
                 child: CyberGlassCard(
                   padding: const EdgeInsets.all(18),
                   borderColor: AppColors.primaryCyan.withOpacity(0.35),
@@ -191,7 +220,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppColors.primaryCyan.withValues(alpha: 0.6),
+                                  color: AppColors.primaryCyan.withValues(
+                                    alpha: 0.6,
+                                  ),
                                   blurRadius: 6,
                                   spreadRadius: 1,
                                 ),
@@ -235,7 +266,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       // Stats Row
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
@@ -248,16 +281,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _buildStatItem('Audits Run', '$totalAudits',
-                                AppColors.primaryCyan),
-                            _buildStatDivider(),
-                            _buildStatItem('Leaks Prevented',
-                                '$leaksIntercepted', AppColors.riskCritical),
+                            _buildStatItem(
+                              'Audits Run',
+                              '$totalAudits',
+                              AppColors.primaryCyan,
+                            ),
                             _buildStatDivider(),
                             _buildStatItem(
-                                'AI Engine',
-                                settings.hasApiKey ? 'Gemini 2.5' : 'Heuristic',
-                                AppColors.riskLow),
+                              'Leaks Prevented',
+                              '$leaksIntercepted',
+                              AppColors.riskCritical,
+                            ),
+                            _buildStatDivider(),
+                            _buildStatItem(
+                              'AI Engine',
+                              settings.hasApiKey ? 'Gemini 2.5' : 'Heuristic',
+                              AppColors.riskLow,
+                            ),
                           ],
                         ),
                       ),
@@ -270,8 +310,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Primary Actions: Capture & Upload
             SliverToBoxAdapter(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     // Capture Photo Button
@@ -281,14 +323,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         title: 'Capture Photo',
                         subtitle: 'Live Camera HUD',
                         icon: Icons.camera_alt_rounded,
-                        gradient: const [
-                          Color(0xFF00C6FF),
-                          Color(0xFF0072FF),
-                        ],
+                        gradient: const [Color(0xFF00C6FF), Color(0xFF0072FF)],
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                                builder: (_) => const CameraScreen()),
+                              builder: (_) => const CameraScreen(),
+                            ),
                           );
                         },
                       ),
@@ -301,10 +341,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         title: 'Upload Photo',
                         subtitle: 'Gallery & Storage',
                         icon: Icons.photo_library_rounded,
-                        gradient: const [
-                          Color(0xFF7928CA),
-                          Color(0xFFFF0080),
-                        ],
+                        gradient: const [Color(0xFF7928CA), Color(0xFFFF0080)],
                         onTap: () async {
                           await ref
                               .read(auditProvider.notifier)
@@ -324,12 +361,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Sample Threat Scenarios Carousel Section
             SliverToBoxAdapter(
               child: Padding(
-                padding:
-                    const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 8),
+                padding: const EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 16,
+                  bottom: 8,
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.science_outlined,
-                        size: 18, color: AppColors.primaryCyan),
+                    const Icon(
+                      Icons.science_outlined,
+                      size: 18,
+                      color: AppColors.primaryCyan,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'TEST THREAT SCENARIOS',
@@ -374,12 +418,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Recent Audits Section Header
             SliverToBoxAdapter(
               child: Padding(
-                padding:
-                    const EdgeInsets.only(left: 20, right: 20, top: 24, bottom: 8),
+                padding: const EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 24,
+                  bottom: 8,
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.history_edu_rounded,
-                        size: 18, color: AppColors.accentIndigo),
+                    const Icon(
+                      Icons.history_edu_rounded,
+                      size: 18,
+                      color: AppColors.accentIndigo,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'RECENT PRIVACY AUDITS',
@@ -398,7 +449,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                                builder: (_) => const HistoryScreen()),
+                              builder: (_) => const HistoryScreen(),
+                            ),
                           );
                         },
                         child: Text(
@@ -419,16 +471,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             if (auditState.history.isEmpty)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
                   child: CyberGlassCard(
                     padding: const EdgeInsets.all(24),
                     child: Center(
                       child: Column(
                         children: [
-                          Icon(Icons.shield_outlined,
-                              size: 40,
-                              color: AppColors.textMuted.withOpacity(0.5)),
+                          Icon(
+                            Icons.shield_outlined,
+                            size: 40,
+                            color: AppColors.textMuted.withOpacity(0.5),
+                          ),
                           const SizedBox(height: 10),
                           Text(
                             'No Privacy Audits Yet',
@@ -457,22 +513,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               )
             else
               SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final report = auditState.history[index];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 4),
-                      child: _buildRecentAuditTile(report),
-                    );
-                  },
-                  childCount: auditState.history.length.clamp(0, 4),
-                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final report = auditState.history[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
+                    child: _buildRecentAuditTile(report),
+                  );
+                }, childCount: auditState.history.length.clamp(0, 4)),
               ),
 
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 32),
-            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
           ],
         ),
       ),
@@ -504,11 +557,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildStatDivider() {
-    return Container(
-      width: 1,
-      height: 24,
-      color: AppColors.darkBorder,
-    );
+    return Container(width: 1, height: 24, color: AppColors.darkBorder);
   }
 
   Widget _buildActionTile({
@@ -600,10 +649,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.asset(
-                    scenario.assetPath,
-                    fit: BoxFit.cover,
-                  ),
+                  Image.asset(scenario.assetPath, fit: BoxFit.cover),
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -621,7 +667,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     left: 8,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: riskColor.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(4),
@@ -689,8 +737,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const Icon(Icons.arrow_forward_rounded,
-                          size: 12, color: AppColors.primaryCyan),
+                      const Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 12,
+                        color: AppColors.primaryCyan,
+                      ),
                     ],
                   ),
                 ],
@@ -713,9 +764,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onTap: () {
         ref.read(auditProvider.notifier).setCurrentReport(report);
         Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ResultsScreen(report: report),
-          ),
+          MaterialPageRoute(builder: (_) => ResultsScreen(report: report)),
         );
       },
       child: Row(
@@ -772,6 +821,355 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Cyber-styled modal displaying execution results of Zenith's 15-class benchmark evaluation suite.
+class BenchmarkSuiteModal extends StatefulWidget {
+  const BenchmarkSuiteModal({super.key});
+
+  @override
+  State<BenchmarkSuiteModal> createState() => _BenchmarkSuiteModalState();
+}
+
+class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
+  BenchmarkEvaluationSummary? _summary;
+  bool _isRunning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _runBenchmark();
+  }
+
+  Future<void> _runBenchmark() async {
+    setState(() => _isRunning = true);
+    final summary = await ZenithTestRunner.runBenchmarkSuite();
+    if (mounted) {
+      setState(() {
+        _summary = summary;
+        _isRunning = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.88,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkCard : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 24,
+                spreadRadius: 4,
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Modal drag handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.textMuted.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryCyan.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.verified_outlined,
+                        color: AppColors.primaryCyan,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'BENCHMARK SUITE',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.1,
+                              color: isDark
+                                  ? AppColors.textWhite
+                                  : AppColors.textDark,
+                            ),
+                          ),
+                          Text(
+                            '15 Threat Classes • Deterministic Calibration',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: _isRunning
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh_rounded),
+                      onPressed: _isRunning ? null : _runBenchmark,
+                      tooltip: 'Re-run Benchmark Suite',
+                    ),
+                  ],
+                ),
+              ),
+
+              const Divider(height: 1),
+
+              // Content
+              Expanded(
+                child: _isRunning
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(
+                              color: AppColors.primaryCyan,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Running 15 Scenario Threat Evaluations...',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : _summary == null
+                    ? const SizedBox.shrink()
+                    : ListView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          // Telemetry Summary Card
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.riskLow.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: AppColors.riskLow.withOpacity(0.3),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _buildMetric(
+                                  'Pass Rate',
+                                  '${_summary!.passRate.toStringAsFixed(0)}%',
+                                  AppColors.riskLow,
+                                ),
+                                _buildMetric(
+                                  'Scenarios',
+                                  '${_summary!.passedTests}/${_summary!.totalTests}',
+                                  AppColors.primaryCyan,
+                                ),
+                                _buildMetric(
+                                  'Mean Delta',
+                                  '${_summary!.meanAbsoluteScoreDelta.toStringAsFixed(1)} pts',
+                                  AppColors.accentIndigo,
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          Text(
+                            'SCENARIO EVALUATIONS (${_summary!.results.length})',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          ..._summary!.results.map((res) {
+                            final tc = res.testCase;
+                            final passColor = res.passed
+                                ? AppColors.riskLow
+                                : AppColors.riskCritical;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.darkBg.withOpacity(0.6)
+                                    : AppColors.lightBg,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: passColor.withOpacity(0.3),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primaryCyan
+                                              .withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          tc.testId,
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primaryCyan,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          tc.scenarioClass,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark
+                                                ? AppColors.textWhite
+                                                : AppColors.textDark,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: passColor.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          res.passed ? 'PASSED' : 'FAILED',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            color: passColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    tc.title,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? AppColors.textWhite
+                                          : AppColors.textDark,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Score: ${res.report.overallScore}/100 (${res.report.riskLevel.label}) • Expected: [${tc.minExpectedScore} - ${tc.maxExpectedScore}]',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11,
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    tc.acceptanceCriteria,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic,
+                                      color: AppColors.textMuted.withOpacity(
+                                        0.8,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMetric(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 11,
+            color: AppColors.textMuted,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../models/exposure_category.dart';
 import '../../models/risk_level.dart';
@@ -28,9 +29,7 @@ class ExposureCategoryCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       margin: const EdgeInsets.only(bottom: 10),
       onTap: onTap,
-      borderColor: detectedCount > 0
-          ? riskLevel.color.withOpacity(0.35)
-          : null,
+      borderColor: detectedCount > 0 ? riskLevel.color.withOpacity(0.35) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -58,7 +57,9 @@ class ExposureCategoryCard extends StatelessWidget {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: isDark ? AppColors.textWhite : AppColors.textDark,
+                        color: isDark
+                            ? AppColors.textWhite
+                            : AppColors.textDark,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -120,10 +121,7 @@ class ExposureCategoryCard extends StatelessWidget {
                     height: 6,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [
-                          category.color,
-                          riskLevel.color,
-                        ],
+                        colors: [category.color, riskLevel.color],
                       ),
                       borderRadius: BorderRadius.circular(6),
                       boxShadow: [

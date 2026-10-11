@@ -1,9 +1,11 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../core/theme/app_colors.dart';
 import '../providers/audit_provider.dart';
 import '../providers/settings_provider.dart';
@@ -196,8 +198,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  auditState.errorMessage ??
-                                      'An unexpected error occurred during scan.',
+                                  auditState.errorMessage ?? 'An unexpected error occurred during scan.',
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 12,
@@ -213,7 +214,8 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: Colors.white,
                                         side: const BorderSide(
-                                            color: AppColors.darkBorder),
+                                          color: AppColors.darkBorder,
+                                        ),
                                       ),
                                       child: const Text('Back'),
                                     ),
@@ -274,8 +276,9 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
                         borderRadius: BorderRadius.circular(6),
                         child: LinearProgressIndicator(
                           value: status.progressValue,
-                          backgroundColor:
-                              AppColors.darkBorder.withOpacity(0.5),
+                          backgroundColor: AppColors.darkBorder.withOpacity(
+                            0.5,
+                          ),
                           valueColor: const AlwaysStoppedAnimation<Color>(
                             AppColors.primaryCyan,
                           ),

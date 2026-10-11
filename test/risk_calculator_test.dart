@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zenith/models/detected_element.dart';
 import 'package:zenith/models/exposure_category.dart';
-import 'package:zenith/models/privacy_audit_report.dart';
 import 'package:zenith/models/recommendation.dart';
 import 'package:zenith/models/risk_level.dart';
 import 'package:zenith/services/mock_analysis_service.dart';
@@ -29,46 +28,77 @@ void main() {
 
     test('ExposureCategory mappings are complete across all 5 domains', () {
       expect(ExposureCategory.values.length, 5);
-      expect(ExposureCategory.fromString('identity'), ExposureCategory.identity);
-      expect(ExposureCategory.fromString('location'), ExposureCategory.location);
+      expect(
+        ExposureCategory.fromString('identity'),
+        ExposureCategory.identity,
+      );
+      expect(
+        ExposureCategory.fromString('location'),
+        ExposureCategory.location,
+      );
       expect(ExposureCategory.fromString('digital'), ExposureCategory.digital);
-      expect(ExposureCategory.fromString('personal_info'), ExposureCategory.personalInfo);
-      expect(ExposureCategory.fromString('transportation'), ExposureCategory.transportation);
+      expect(
+        ExposureCategory.fromString('personal_info'),
+        ExposureCategory.personalInfo,
+      );
+      expect(
+        ExposureCategory.fromString('transportation'),
+        ExposureCategory.transportation,
+      );
     });
 
-    test('SampleDataService returns all 5 realistic scenarios with OPSEC metrics', () {
-      final scenarios = SampleDataService.getScenarios();
-      expect(scenarios.length, 5);
+    test(
+      'SampleDataService returns all 5 realistic scenarios with OPSEC metrics',
+      () {
+        final scenarios = SampleDataService.getScenarios();
+        expect(scenarios.length, 5);
 
-      // 1. Student ID
-      final studentId = scenarios.firstWhere((s) => s.id == 'sample_student_id');
-      expect(studentId.expectedRiskScore, 88);
-      expect(studentId.riskLevel, RiskLevel.critical);
-      expect(studentId.report.detectedElements.length, 5);
+        // 1. Student ID
+        final studentId = scenarios.firstWhere(
+          (s) => s.id == 'sample_student_id',
+        );
+        expect(studentId.expectedRiskScore, 88);
+        expect(studentId.riskLevel, RiskLevel.critical);
+        expect(studentId.report.detectedElements.length, 5);
 
-      // 2. Boarding Pass
-      final boardingPass = scenarios.firstWhere((s) => s.id == 'sample_boarding_pass');
-      expect(boardingPass.expectedRiskScore, 92);
-      expect(boardingPass.riskLevel, RiskLevel.critical);
-      expect(boardingPass.report.categoryScores[ExposureCategory.transportation], 98);
+        // 2. Boarding Pass
+        final boardingPass = scenarios.firstWhere(
+          (s) => s.id == 'sample_boarding_pass',
+        );
+        expect(boardingPass.expectedRiskScore, 92);
+        expect(boardingPass.riskLevel, RiskLevel.critical);
+        expect(
+          boardingPass.report.categoryScores[ExposureCategory.transportation],
+          98,
+        );
 
-      // 3. Workstation Credentials Leak
-      final workstation = scenarios.firstWhere((s) => s.id == 'sample_workstation_screen');
-      expect(workstation.expectedRiskScore, 96);
-      expect(workstation.riskLevel, RiskLevel.critical);
-      expect(workstation.report.categoryScores[ExposureCategory.digital], 99);
+        // 3. Workstation Credentials Leak
+        final workstation = scenarios.firstWhere(
+          (s) => s.id == 'sample_workstation_screen',
+        );
+        expect(workstation.expectedRiskScore, 96);
+        expect(workstation.riskLevel, RiskLevel.critical);
+        expect(workstation.report.categoryScores[ExposureCategory.digital], 99);
 
-      // 4. Suburban House
-      final streetHouse = scenarios.firstWhere((s) => s.id == 'sample_street_house');
-      expect(streetHouse.expectedRiskScore, 72);
-      expect(streetHouse.riskLevel, RiskLevel.high);
-      expect(streetHouse.report.categoryScores[ExposureCategory.location], 92);
+        // 4. Suburban House
+        final streetHouse = scenarios.firstWhere(
+          (s) => s.id == 'sample_street_house',
+        );
+        expect(streetHouse.expectedRiskScore, 72);
+        expect(streetHouse.riskLevel, RiskLevel.high);
+        expect(
+          streetHouse.report.categoryScores[ExposureCategory.location],
+          92,
+        );
 
-      // 5. Clean Landscape (Safe baseline)
-      final clean = scenarios.firstWhere((s) => s.id == 'sample_clean_landscape');
-      expect(clean.expectedRiskScore, 8);
-      expect(clean.riskLevel, RiskLevel.low);
-    });
+        // 5. Clean Landscape (Safe baseline)
+        final clean = scenarios.firstWhere(
+          (s) => s.id == 'sample_clean_landscape',
+        );
+        expect(clean.expectedRiskScore, 8);
+        expect(clean.riskLevel, RiskLevel.low);
+      },
+    );
 
     test('BoundingBox geometry conversions are accurate', () {
       const box = BoundingBox(left: 0.1, top: 0.2, width: 0.5, height: 0.4);
@@ -96,13 +126,19 @@ void main() {
       expect(completed.title, rec.title);
     });
 
-    test('MockAnalysisService generates valid heuristic report for custom uploads', () async {
-      final report = await MockAnalysisService.analyzeImage();
-      expect(report.overallScore > 0, true);
-      expect(report.detectedElements.isNotEmpty, true);
-      expect(report.inferredInsights.isNotEmpty, true);
-      expect(report.recommendations.isNotEmpty, true);
-      expect(report.categoryScores.containsKey(ExposureCategory.identity), true);
-    });
+    test(
+      'MockAnalysisService generates valid heuristic report for custom uploads',
+      () async {
+        final report = await MockAnalysisService.analyzeImage();
+        expect(report.overallScore > 0, true);
+        expect(report.detectedElements.isNotEmpty, true);
+        expect(report.inferredInsights.isNotEmpty, true);
+        expect(report.recommendations.isNotEmpty, true);
+        expect(
+          report.categoryScores.containsKey(ExposureCategory.identity),
+          true,
+        );
+      },
+    );
   });
 }

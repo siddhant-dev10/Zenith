@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/user_settings.dart';
 import '../services/storage_service.dart';
 
-final settingsProvider =
-    NotifierProvider<SettingsNotifier, UserSettings>(SettingsNotifier.new);
+final settingsProvider = NotifierProvider<SettingsNotifier, UserSettings>(
+  SettingsNotifier.new,
+);
 
 class SettingsNotifier extends Notifier<UserSettings> {
   @override

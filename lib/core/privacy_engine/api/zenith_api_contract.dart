@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../../../models/privacy_audit_report.dart';
+import '../../network/api_config.dart';
 import '../pipeline/zenith_analysis_pipeline.dart';
 import '../providers/vision_analysis_provider.dart';
 import '../testing/test_case_models.dart';
@@ -425,19 +426,26 @@ class ZenithHttpClient implements IZenithClient {
       'clientVersion': request.clientVersion,
     };
 
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
-    );
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return AnalyzeImageResponse.fromJson(data);
-    } else {
-      throw Exception(
-        'Zenith API Error (${response.statusCode}): ${response.body}',
+    try {
+      final response = await _client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
       );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return AnalyzeImageResponse.fromJson(data);
+      } else {
+        throw Exception(
+          'Zenith API Error (${response.statusCode}): ${response.body}',
+        );
+      }
+    } catch (e) {
+      if (e is Exception && e.toString().contains('Zenith API Error')) {
+        rethrow;
+      }
+      throw Exception(ApiConfig.diagnoseConnectionError(e, uri.toString()));
     }
   }
 
@@ -451,19 +459,26 @@ class ZenithHttpClient implements IZenithClient {
       'redactedImage': base64Encode(request.redactedImageBytes),
     };
 
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
-    );
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return RescanVerificationResponse.fromJson(data);
-    } else {
-      throw Exception(
-        'Zenith Rescan API Error (${response.statusCode}): ${response.body}',
+    try {
+      final response = await _client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
       );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return RescanVerificationResponse.fromJson(data);
+      } else {
+        throw Exception(
+          'Zenith Rescan API Error (${response.statusCode}): ${response.body}',
+        );
+      }
+    } catch (e) {
+      if (e is Exception && e.toString().contains('Zenith Rescan API Error')) {
+        rethrow;
+      }
+      throw Exception(ApiConfig.diagnoseConnectionError(e, uri.toString()));
     }
   }
 

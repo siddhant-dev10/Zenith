@@ -441,9 +441,10 @@ class AuditNotifier extends Notifier<AuditState> {
       );
       return null;
     } catch (e) {
+      final cleanMsg = e.toString().replaceFirst('Exception: ', '');
       state = state.copyWith(
         status: ScanStatus.error,
-        errorMessage: 'Privacy Analysis failed: $e. You can retry the scan.',
+        errorMessage: cleanMsg,
       );
       return null;
     }

@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 
 import '../core/constants/app_constants.dart';
+import '../core/network/api_config.dart';
 import '../core/theme/app_colors.dart';
 import '../providers/settings_provider.dart';
 import '../services/gemini_vision_service.dart';
@@ -17,21 +20,80 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _apiKeyController;
+  late TextEditingController _backendUrlController;
   bool _obscureKey = true;
   bool _isTestingKey = false;
   bool? _keyTestResult;
+
+  bool _isTestingBackend = false;
+  bool? _backendTestSuccess;
+  String? _backendTestDiagnostic;
 
   @override
   void initState() {
     super.initState();
     final settings = ref.read(settingsProvider);
     _apiKeyController = TextEditingController(text: settings.apiKey);
+    _backendUrlController = TextEditingController(text: settings.backendUrl);
   }
 
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _backendUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _testBackendConnection([String? overrideUrl]) async {
+    final raw = overrideUrl ?? _backendUrlController.text;
+    final targetUrl = ApiConfig.sanitizeUrl(raw);
+    _backendUrlController.text = targetUrl;
+
+    setState(() {
+      _isTestingBackend = true;
+      _backendTestSuccess = null;
+      _backendTestDiagnostic = null;
+    });
+
+    try {
+      final uri = Uri.parse('$targetUrl/health');
+      final resp = await http.get(uri).timeout(const Duration(seconds: 5));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final isConfigured = data['geminiConfigured'] == true;
+        final provider = data['provider'] ?? 'gemini';
+        await ref.read(settingsProvider.notifier).updateBackendUrl(targetUrl);
+        if (mounted) {
+          setState(() {
+            _isTestingBackend = false;
+            _backendTestSuccess = true;
+            _backendTestDiagnostic =
+                'Connected to Zenith Engine!\n'
+                '• Service: ${data["service"] ?? "zenith"}\n'
+                '• Vision Provider: $provider\n'
+                '• Gemini API: ${isConfigured ? "ACTIVE (Live AI)" : "UNCONFIGURED (Mock/503)"}';
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isTestingBackend = false;
+            _backendTestSuccess = false;
+            _backendTestDiagnostic =
+                'Server responded with HTTP ${resp.statusCode}: ${resp.body}';
+          });
+        }
+      }
+    } catch (e) {
+      final diagnostic = ApiConfig.diagnoseConnectionError(e, targetUrl);
+      if (mounted) {
+        setState(() {
+          _isTestingBackend = false;
+          _backendTestSuccess = false;
+          _backendTestDiagnostic = diagnostic;
+        });
+      }
+    }
   }
 
   Future<void> _testApiKey() async {
@@ -301,9 +363,209 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
               ),
             ),
+             const SizedBox(height: 24),
+
+            // 2. Zenith Backend Connectivity & Endpoint Configuration
+            _buildSectionHeader('BACKEND CONNECTIVITY & ENDPOINT'),
+            const SizedBox(height: 8),
+            CyberGlassCard(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.dns_rounded,
+                        size: 18,
+                        color: AppColors.primaryCyan,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Remote REST Backend Engine',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: isDark
+                                ? AppColors.textWhite
+                                : AppColors.textDark,
+                          ),
+                        ),
+                      ),
+                      Switch(
+                        value: settings.useRemoteBackend,
+                        activeColor: AppColors.primaryCyan,
+                        onChanged: (val) {
+                          ref
+                              .read(settingsProvider.notifier)
+                              .toggleRemoteBackend(val);
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'When enabled, optical payloads are submitted to the Zenith server for analysis. '
+                    'Android emulators must use 10.0.2.2:8080; physical phones require your computer\'s Wi-Fi LAN IP.',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                      height: 1.4,
+                    ),
+                  ),
+                  if (settings.useRemoteBackend) ...[
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _backendUrlController,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 13,
+                        color: isDark
+                            ? AppColors.textWhite
+                            : AppColors.textDark,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'API Base URL',
+                        labelStyle: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textMuted,
+                          fontSize: 12,
+                        ),
+                        hintText: 'e.g. http://10.0.2.2:8080 or http://192.168.x.x:8080',
+                        hintStyle: GoogleFonts.jetBrainsMono(
+                          color: AppColors.textMuted.withOpacity(0.5),
+                          fontSize: 12,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.link_rounded,
+                          size: 18,
+                          color: AppColors.primaryCyan,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          tooltip: 'Reset to Platform Default',
+                          onPressed: () {
+                            final def = ApiConfig.getDefaultBackendUrl();
+                            _backendUrlController.text = def;
+                            _testBackendConnection(def);
+                          },
+                        ),
+                        filled: true,
+                        fillColor: isDark
+                            ? Colors.black.withOpacity(0.3)
+                            : Colors.grey.withOpacity(0.08),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: AppColors.primaryCyan.withOpacity(0.3),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'QUICK PRESETS:',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildPresetChip('🤖 Emulator', ApiConfig.defaultEmulatorUrl),
+                          const SizedBox(width: 8),
+                          _buildPresetChip('💻 Localhost', ApiConfig.defaultLocalhostUrl),
+                          const SizedBox(width: 8),
+                          _buildPresetChip('📱 Wi-Fi LAN', 'http://192.168.0.16:8080'),
+                          const SizedBox(width: 8),
+                          _buildPresetChip('🔒 Prod HTTPS', ApiConfig.defaultProductionUrl),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _isTestingBackend
+                              ? null
+                              : () => _testBackendConnection(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryCyan,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                          ),
+                          icon: _isTestingBackend
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.black,
+                                  ),
+                                )
+                              : const Icon(Icons.network_ping_rounded, size: 16),
+                          label: Text(
+                            _isTestingBackend ? 'Testing...' : 'Test & Save Endpoint',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        if (_backendTestSuccess != null)
+                          Icon(
+                            _backendTestSuccess!
+                                ? Icons.check_circle_rounded
+                                : Icons.error_rounded,
+                            size: 18,
+                            color: _backendTestSuccess!
+                                ? AppColors.riskLow
+                                : AppColors.riskCritical,
+                          ),
+                      ],
+                    ),
+                    if (_backendTestDiagnostic != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _backendTestSuccess == true
+                              ? AppColors.riskLow.withOpacity(0.12)
+                              : AppColors.riskCritical.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _backendTestSuccess == true
+                                ? AppColors.riskLow.withOpacity(0.4)
+                                : AppColors.riskCritical.withOpacity(0.4),
+                          ),
+                        ),
+                        child: Text(
+                          _backendTestDiagnostic!,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            color: _backendTestSuccess == true
+                                ? AppColors.riskLow
+                                : (isDark ? AppColors.textWhite : AppColors.textDark),
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
             const SizedBox(height: 24),
 
-            // 2. Multimodal Model Selector
+            // 3. Multimodal Model Selector
             _buildSectionHeader('AI MODEL SELECTION'),
             const SizedBox(height: 8),
             CyberGlassCard(
@@ -544,6 +806,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPresetChip(String label, String url) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isCurrent = _backendUrlController.text == url;
+
+    return ActionChip(
+      label: Text(
+        label,
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 11,
+          fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600,
+          color: isCurrent
+              ? Colors.black
+              : (isDark ? AppColors.textWhite : AppColors.textDark),
+        ),
+      ),
+      backgroundColor: isCurrent
+          ? AppColors.primaryCyan
+          : (isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05)),
+      side: BorderSide(
+        color: isCurrent
+            ? AppColors.primaryCyan
+            : (isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.12)),
+      ),
+      onPressed: () {
+        _backendUrlController.text = url;
+        _testBackendConnection(url);
+      },
     );
   }
 }

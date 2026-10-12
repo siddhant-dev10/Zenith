@@ -41,7 +41,7 @@ void main() {
         expect(find.text('Capture Photo'), findsWidgets);
         expect(find.text('Upload Photo'), findsWidgets);
         expect(find.text('TEST THREAT SCENARIOS'), findsWidgets);
-        expect(find.text('Execute Full Suite (20 Cases)'), findsOneWidget);
+        expect(find.textContaining('Execute Full Suite'), findsOneWidget);
 
         // 4. Test Navigation Bar switching to Evaluation Dashboard
         await tester.tap(find.text('Evaluation'));

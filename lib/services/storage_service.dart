@@ -27,8 +27,7 @@ class StorageService {
         AppConstants.sensitivityBalanced;
     final useMock = prefs.getBool(AppConstants.keyUseMockFallback) ?? true;
     final theme = prefs.getString(AppConstants.keyThemeMode) ?? 'dark';
-    final backendUrl =
-        prefs.getString(AppConstants.keyBackendUrl) ?? 'http://localhost:8080';
+    final backendUrl = prefs.getString(AppConstants.keyBackendUrl);
     final useRemoteBackend =
         prefs.getBool(AppConstants.keyUseRemoteBackend) ?? true;
 

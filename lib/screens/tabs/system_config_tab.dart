@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 
+import '../../core/network/api_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/settings_provider.dart';
 import '../settings_screen.dart';
@@ -59,7 +60,7 @@ class _SystemConfigTabState extends ConsumerState<SystemConfigTab> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _healthError = e.toString();
+          _healthError = ApiConfig.diagnoseConnectionError(e, url);
           _isCheckingHealth = false;
         });
       }

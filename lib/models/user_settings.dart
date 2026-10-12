@@ -1,4 +1,5 @@
 import '../core/constants/app_constants.dart';
+import '../core/network/api_config.dart';
 
 class UserSettings {
   final String apiKey;
@@ -6,7 +7,7 @@ class UserSettings {
   final String sensitivity;
   final bool useMockFallback;
   final String themeMode;
-  final String backendUrl;
+  final String? _rawBackendUrl;
   final bool useRemoteBackend;
 
   const UserSettings({
@@ -15,9 +16,23 @@ class UserSettings {
     this.sensitivity = AppConstants.sensitivityBalanced,
     this.useMockFallback = true,
     this.themeMode = 'dark',
-    this.backendUrl = 'http://localhost:8080',
+    String? backendUrl,
     this.useRemoteBackend = true,
-  });
+  }) : _rawBackendUrl = backendUrl;
+
+  /// Resolves the effective, environment-aware backend URL.
+  String get backendUrl {
+    final raw = _rawBackendUrl?.trim() ?? '';
+    if (raw.isEmpty) {
+      return ApiConfig.getDefaultBackendUrl();
+    }
+    // Auto-migrate legacy default 'http://localhost:8080' to emulator URL on Android
+    if (ApiConfig.getDefaultBackendUrl() == ApiConfig.defaultEmulatorUrl &&
+        (raw == 'http://localhost:8080' || raw == 'http://127.0.0.1:8080')) {
+      return ApiConfig.defaultEmulatorUrl;
+    }
+    return ApiConfig.sanitizeUrl(raw);
+  }
 
   bool get hasApiKey => apiKey.trim().isNotEmpty;
 
@@ -36,7 +51,7 @@ class UserSettings {
       sensitivity: sensitivity ?? this.sensitivity,
       useMockFallback: useMockFallback ?? this.useMockFallback,
       themeMode: themeMode ?? this.themeMode,
-      backendUrl: backendUrl ?? this.backendUrl,
+      backendUrl: backendUrl ?? _rawBackendUrl,
       useRemoteBackend: useRemoteBackend ?? this.useRemoteBackend,
     );
   }
@@ -59,7 +74,7 @@ class UserSettings {
           json['sensitivity'] as String? ?? AppConstants.sensitivityBalanced,
       useMockFallback: json['useMockFallback'] as bool? ?? true,
       themeMode: json['themeMode'] as String? ?? 'dark',
-      backendUrl: json['backendUrl'] as String? ?? 'http://localhost:8080',
+      backendUrl: json['backendUrl'] as String?,
       useRemoteBackend: json['useRemoteBackend'] as bool? ?? true,
     );
   }

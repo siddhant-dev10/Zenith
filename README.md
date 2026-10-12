@@ -152,6 +152,13 @@ The native Android release is precompiled and included directly in this reposito
 adb install -r assets/apk/zenith-v1.0.0.apk
 ```
 
+### 🔌 Connecting the Android App to the Backend Server
+The Android app features a built-in **Backend Connectivity & Diagnostics** manager in **Settings**:
+- **Android Emulator**: Connects to host Mac via `http://10.0.2.2:8080` (default on Android).
+- **Physical Device (Wi-Fi LAN)**: Connect to your computer's local Wi-Fi IP (e.g. `http://192.168.0.16:8080`).
+- **Physical Device (USB ADB)**: Run `adb reverse tcp:8080 tcp:8080` to route `http://localhost:8080` over USB.
+- **In-App Health Diagnostics**: Tap **"Test & Save Endpoint"** in Settings to test latency, verify Gemini status, and view real-time diagnostics.
+
 ---
 
 ## 💻 Local Development & Quickstart

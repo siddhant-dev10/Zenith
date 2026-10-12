@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'exposure_category.dart';
 import 'risk_level.dart';
@@ -16,15 +15,6 @@ class BoundingBox {
     required this.width,
     required this.height,
   });
-
-  Rect toRect(Size containerSize) {
-    return Rect.fromLTWH(
-      left * containerSize.width,
-      top * containerSize.height,
-      width * containerSize.width,
-      height * containerSize.height,
-    );
-  }
 
   /// Calculates the Intersection over Union (IoU) between this box and [other].
   double intersectionOverUnion(BoundingBox other) {
@@ -82,6 +72,7 @@ class DetectedElement {
   final double visibilityScore; // 0.1 - 1.0
   final bool isDirectExposure;
   final String actionableMitigation;
+  final String severityReason;
 
   const DetectedElement({
     required this.id,
@@ -101,6 +92,7 @@ class DetectedElement {
     this.visibilityScore = 0.9,
     this.isDirectExposure = true,
     this.actionableMitigation = '',
+    this.severityReason = '',
   });
 
   /// Computes the standalone risk contribution R(f_k) = S * E * V * C
@@ -130,6 +122,7 @@ class DetectedElement {
     double? visibilityScore,
     bool? isDirectExposure,
     String? actionableMitigation,
+    String? severityReason,
   }) {
     return DetectedElement(
       id: id ?? this.id,
@@ -149,6 +142,7 @@ class DetectedElement {
       visibilityScore: visibilityScore ?? this.visibilityScore,
       isDirectExposure: isDirectExposure ?? this.isDirectExposure,
       actionableMitigation: actionableMitigation ?? this.actionableMitigation,
+      severityReason: severityReason ?? this.severityReason,
     );
   }
 
@@ -170,6 +164,8 @@ class DetectedElement {
     'visibilityScore': visibilityScore,
     'isDirectExposure': isDirectExposure,
     'actionableMitigation': actionableMitigation,
+    'severityReason': severityReason,
+    'calculatedRiskContribution': calculatedRiskContribution,
   };
 
   factory DetectedElement.fromJson(Map<String, dynamic> json) {
@@ -207,6 +203,7 @@ class DetectedElement {
           .clamp(0.1, 1.0),
       isDirectExposure: json['isDirectExposure'] as bool? ?? true,
       actionableMitigation: json['actionableMitigation'] as String? ?? '',
+      severityReason: json['severityReason'] as String? ?? '',
     );
   }
 

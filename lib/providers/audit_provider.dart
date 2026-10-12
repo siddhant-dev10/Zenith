@@ -331,25 +331,29 @@ class AuditNotifier extends Notifier<AuditState> {
               ),
             )
             .timeout(
-              const Duration(seconds: 30),
+              const Duration(seconds: 60),
               onTimeout: () => throw TimeoutException(
-                'Zenith backend at ${settings.backendUrl} timed out after 30 seconds.',
+                'Zenith backend at ${settings.backendUrl} timed out after 60 seconds.',
               ),
             );
 
         // Convert response into local PrivacyAuditReport model
         report = PrivacyAuditReport(
           id: response.analysisId,
-          timestamp: DateTime.now(),
+          timestamp: response.timestamp,
           imagePath: state.selectedImagePath,
           imageBytes: effectiveBytes,
           sampleAsset: state.selectedSampleAsset,
           overallScore: response.overallScore,
           riskLevel: RiskLevel.fromScore(response.overallScore),
-          title: '${response.severityLevel} Privacy & Security Exposure',
-          summary: response.findings.isEmpty
-              ? 'No sensitive visual markers were detected in this photograph.'
-              : 'Automated privacy assessment detected ${response.findings.length} sensitive exposure marker(s).',
+          title: response.headline.isNotEmpty
+              ? response.headline
+              : '${response.severityLevel} Privacy & Security Exposure',
+          summary: response.executiveSummary.isNotEmpty
+              ? response.executiveSummary
+              : (response.findings.isEmpty
+                    ? 'No sensitive visual markers were detected in this photograph.'
+                    : 'Automated privacy assessment detected ${response.findings.length} sensitive exposure marker(s).'),
           detectedElements: response.findings
               .map((f) => DetectedElement.fromJson(f))
               .toList(),
@@ -366,14 +370,26 @@ class AuditNotifier extends Notifier<AuditState> {
           processingStatus: response.processingStatus,
           analysisLimitations: response.analysisLimitations,
           processingErrors: response.processingErrors,
+          isLiveAi: !response.degradedAnalysis,
+          model: response.model,
+          provider: response.provider,
+          imageSummary: response.imageSummary,
         );
       } else {
         // Local Intelligence Pipeline
         final IVisionAnalysisProvider provider;
         if (settings.hasApiKey) {
-          provider = GeminiVisionProvider(apiKey: settings.apiKey);
-        } else {
+          provider = GeminiVisionProvider(
+            apiKey: settings.apiKey,
+            model: settings.model,
+          );
+        } else if (settings.useMockFallback) {
           provider = MockVisionProvider();
+        } else {
+          throw const VisionProviderException(
+            'GEMINI_API_KEY is required for live privacy analysis. Please configure your Gemini API key in Settings or connect to the Zenith server backend.',
+            statusCode: 401,
+          );
         }
 
         final pipeline = ZenithAnalysisPipeline(visionProvider: provider);
@@ -394,6 +410,7 @@ class AuditNotifier extends Notifier<AuditState> {
           imagePath: state.selectedImagePath,
           sampleAsset: state.selectedSampleAsset,
           sensitivity: settings.sensitivity,
+          model: settings.model,
           allowDegradedFallback: settings.useMockFallback,
         );
       }

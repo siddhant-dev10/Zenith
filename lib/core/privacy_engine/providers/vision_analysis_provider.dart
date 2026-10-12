@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../../models/detected_element.dart';
 import '../../../models/exposure_category.dart';
 import '../../../models/risk_level.dart';
+import '../scoring/deterministic_risk_engine.dart';
 
 /// Raw observations output by a vision analysis provider before deterministic scoring.
 class VisionAnalysisRawResult {
@@ -14,6 +15,10 @@ class VisionAnalysisRawResult {
   final Map<String, dynamic> rawModelMetadata;
   final bool isLiveAi;
   final int durationMs;
+  final List<String> inferences;
+  final List<String> analysisLimitations;
+  final String model;
+  final String provider;
 
   const VisionAnalysisRawResult({
     required this.sceneDescription,
@@ -21,6 +26,10 @@ class VisionAnalysisRawResult {
     this.rawModelMetadata = const {},
     required this.isLiveAi,
     required this.durationMs,
+    this.inferences = const [],
+    this.analysisLimitations = const [],
+    this.model = 'mock-heuristic',
+    this.provider = 'mock',
   });
 }
 
@@ -53,18 +62,42 @@ class VisionProviderException implements Exception {
   String toString() => 'VisionProviderException: $message';
 }
 
+/// Unconfigured provider used when server has no GEMINI_API_KEY.
+/// Rejects real image analysis explicitly instead of falling back to fake mock results.
+class UnconfiguredVisionProvider implements IVisionAnalysisProvider {
+  final String message;
+
+  const UnconfiguredVisionProvider({
+    this.message = 'GEMINI_API_KEY environment variable is not configured on the server. Real image analysis requires valid Google Gemini credentials.',
+  });
+
+  @override
+  Future<VisionAnalysisRawResult> analyze({
+    required Uint8List imageBytes,
+    required String mimeType,
+    String? sensitivity,
+    String? model,
+  }) async {
+    throw VisionProviderException(message, statusCode: 503);
+  }
+}
+
 /// Live Google Gemini Vision provider utilizing multimodal prompt engineering.
 ///
 /// Restricts Gemini to raw detection, localization, and description.
 /// Numerical scoring authority is reserved for Zenith's DeterministicRiskEngine.
 class GeminiVisionProvider implements IVisionAnalysisProvider {
   final String apiKey;
+  final String model;
   final http.Client _httpClient;
   static const String _baseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models';
 
-  GeminiVisionProvider({required this.apiKey, http.Client? httpClient})
-    : _httpClient = httpClient ?? http.Client();
+  GeminiVisionProvider({
+    required this.apiKey,
+    this.model = 'gemini-3.8-flash',
+    http.Client? httpClient,
+  }) : _httpClient = httpClient ?? http.Client();
 
   @override
   Future<VisionAnalysisRawResult> analyze({
@@ -77,51 +110,66 @@ class GeminiVisionProvider implements IVisionAnalysisProvider {
     if (cleanKey.isEmpty) {
       throw const VisionProviderException(
         'Gemini API key is required but was empty.',
+        statusCode: 401,
       );
     }
 
-    final targetModel = model ?? 'gemini-2.5-flash';
-    final endpoint = Uri.parse('$_baseUrl/$targetModel:generateContent');
+    var currentModel = model ?? this.model;
     final base64Image = base64Encode(imageBytes);
 
     final prompt =
         '''
 You are ZENITH Vision Inspection Engine, an adversarial OPSEC and visual privacy analyst.
-Examine this image for sensitive information, privacy risks, credentials, and trackable personal identifiers.
+Evaluate this photograph for privacy exposures, security risks, credentials, and trackable personal identifiers.
 
-SENSITIVITY MODE: ${sensitivity ?? 'Balanced'}.
+SENSITIVITY PROFILE: ${sensitivity ?? 'Balanced'}.
 
-EVALUATE THESE CATEGORIES:
-1. identity: Faces, Student IDs, Employee badges, Passports, Driver licenses, Portrait photos.
-2. location: House numbers, Street signs, Distinct landmarks, Architectural views, Window reflections.
-3. digital: Laptop/monitor screens, Mobile displays, Plaintext passwords, API keys, Tokens, Terminal code.
-4. personal_info: Phone numbers, Email addresses, Credit/Debit cards, Mail envelopes, Barcodes, QR codes.
-5. transportation: Vehicle license plates, Airline boarding passes, Transit tickets, Parking decals.
+EVALUATE THESE CATEGORIES AND SEVERITIES CAREFULLY:
+1. identity:
+   - Faces, selfies, and individual portraits in public or ordinary settings are LOW severity.
+   - Student IDs, University campus cards, and Employee/Corporate badges are HIGH severity.
+   - Government passports, Driver licenses, and National identification cards are CRITICAL severity.
+2. personal_information:
+   - Direct personal phone numbers, private emails, and physical mailing addresses are HIGH severity.
+   - Bank account statements, credit card numbers, and financial records are CRITICAL severity.
+3. digital_security:
+   - Ambient computer/tv screens or benign wallpaper displays without secrets are LOW severity.
+   - Visible terminal shells, active code, or internal network topology are MODERATE severity.
+   - Plaintext passwords, API keys, private tokens, and credentials are CRITICAL severity.
+4. location_exposure:
+   - Generic outdoor scenery, nature landscapes, and diffuse room interiors are LOW severity.
+   - Residential house numbers, street plaques, and geolocatable domicile signs are HIGH severity.
+5. other_exposures:
+   - Vehicle registration plates, airline boarding passes (PNR codes/barcodes), and transit tickets are HIGH severity.
 
-RULES:
-- Provide exact normalized bounding boxes (0.0 to 1.0) when an element has a distinct visual footprint.
-- Extract any readable text snippet into "evidenceText".
-- Estimate baseSensitivity (1 to 100), exploitability (0.2 to 1.0), and visibilityScore (0.1 to 1.0).
-- DO NOT GENERATE AN OVERALL SCORE. Numerical risk scoring is calculated deterministically by Zenith Core.
+STRICT INSTRUCTIONS:
+- Distinguish direct exposures (clearly visible data) from contextual inferences (deduced from clues).
+- For evidence, provide factual observed visual details or legible text snippets without hallucination. Do not invent or guess unreadable text.
+- If no privacy exposures are detected (e.g. an empty nature scene), return an empty "findings" list.
+- DO NOT CALCULATE OR RETURN AN OVERALL RISK SCORE. Numerical scoring is computed independently by Zenith's deterministic risk engine.
+- Return ONLY a valid JSON object matching the schema below. Never wrap the output in markdown code fences (```) or backticks. Never include conversational text.
 
-RESPOND STRICTLY WITH VALID JSON (No markdown code blocks or backticks):
+JSON SCHEMA:
 {
-  "sceneDescription": "Brief summary of image scene",
-  "detectedElements": [
+  "image_summary": "A concise factual description of what is visible in the photograph.",
+  "findings": [
     {
-      "name": "Specific feature name",
-      "category": "identity | location | digital | personal_info | transportation",
-      "riskLevel": "low | moderate | high | critical",
+      "category": "identity | personal_information | digital_security | location_exposure | other_exposures",
+      "type": "Specific feature type (e.g. student_id, face, license_plate, api_token, home_address, monitor_screen)",
+      "description": "Factual explanation of what was observed",
+      "evidence": "Observed visual detail or legible text snippet without hallucination",
       "confidence": 0.95,
-      "baseSensitivity": 85,
-      "exploitability": 0.9,
-      "visibilityScore": 0.95,
-      "evidenceText": "Readable text or token if legible, otherwise null",
-      "description": "Factual description of what was seen",
-      "opsecImpact": "Why it is dangerous if shared online",
-      "actionableMitigation": "Specific step to obscure or remove it",
-      "boundingBox": { "left": 0.1, "top": 0.2, "width": 0.3, "height": 0.2 }
+      "severity": "low | moderate | high | critical",
+      "exposure_type": "direct | inference",
+      "recommendation": "Actionable mitigation advice (e.g. blur face, redact barcode, crop document)",
+      "bounding_box": { "left": 0.1, "top": 0.2, "width": 0.3, "height": 0.2 }
     }
+  ],
+  "inferences": [
+    "Potential risk inferred from combination of visual clues (if any)"
+  ],
+  "analysis_limitations": [
+    "Anything ambiguous, low-resolution, obscured, or unreadable (if any)"
   ]
 }
 ''';
@@ -151,6 +199,7 @@ RESPOND STRICTLY WITH VALID JSON (No markdown code blocks or backticks):
 
     while (attempts < maxAttempts) {
       attempts++;
+      final endpoint = Uri.parse('$_baseUrl/$currentModel:generateContent');
       try {
         response = await _httpClient
             .post(
@@ -161,22 +210,26 @@ RESPOND STRICTLY WITH VALID JSON (No markdown code blocks or backticks):
               },
               body: jsonEncode(requestBody),
             )
-            .timeout(const Duration(seconds: 15));
+            .timeout(const Duration(seconds: 45));
 
         if (response.statusCode == 200) {
           break;
         } else if (response.statusCode == 429) {
           if (attempts < maxAttempts) {
-            await Future.delayed(Duration(milliseconds: 500 * attempts));
+            await Future.delayed(Duration(milliseconds: 1000 * attempts));
             continue;
           }
           throw const VisionProviderException(
-            'Gemini API rate limit exceeded (HTTP 429). Please retry shortly.',
+            'Gemini API rate limit or quota exceeded (HTTP 429). Please retry shortly.',
             statusCode: 429,
             isRateLimit: true,
           );
         } else if (response.statusCode >= 500 && attempts < maxAttempts) {
-          await Future.delayed(Duration(milliseconds: 400 * attempts));
+          if (response.statusCode == 503 &&
+              currentModel != 'gemini-3.5-flash-lite') {
+            currentModel = 'gemini-3.5-flash-lite';
+          }
+          await Future.delayed(Duration(milliseconds: 1200 * attempts));
           continue;
         } else {
           final errorBody = response.body.replaceAll(
@@ -239,10 +292,17 @@ RESPOND STRICTLY WITH VALID JSON (No markdown code blocks or backticks):
       );
     }
 
-    final cleanedText = rawText
+    // Robust JSON parsing: strip potential markdown code fences and isolate outermost JSON block
+    var cleanedText = rawText
         .replaceAll(RegExp(r'^```json\s*', multiLine: true), '')
         .replaceAll(RegExp(r'^```\s*', multiLine: true), '')
         .trim();
+
+    final firstBrace = cleanedText.indexOf('{');
+    final lastBrace = cleanedText.lastIndexOf('}');
+    if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+      cleanedText = cleanedText.substring(firstBrace, lastBrace + 1);
+    }
 
     final Map<String, dynamic> parsed;
     try {
@@ -253,21 +313,117 @@ RESPOND STRICTLY WITH VALID JSON (No markdown code blocks or backticks):
       );
     }
 
-    final rawElements = (parsed['detectedElements'] as List? ?? []).map((e) {
-      final map = Map<String, dynamic>.from(e as Map);
-      return DetectedElement.fromJson(map);
-    }).toList();
+    // Support both schema variations: "findings" or "detectedElements"
+    final rawFindings =
+        (parsed['findings'] as List? ??
+        parsed['detectedElements'] as List? ??
+        []);
+
+    final detectedElements = <DetectedElement>[];
+    for (int i = 0; i < rawFindings.length; i++) {
+      final f = Map<String, dynamic>.from(rawFindings[i] as Map);
+      final categoryStr = f['category'] as String? ?? 'identity';
+      final category = ExposureCategory.fromString(categoryStr);
+
+      final severityStr =
+          (f['severity'] as String? ?? f['riskLevel'] as String? ?? 'moderate')
+              .toLowerCase();
+      final riskLevel = RiskLevel.fromString(severityStr);
+
+      final exposureType =
+          (f['exposure_type'] as String? ??
+                  (f['isDirectExposure'] == false ? 'inference' : 'direct'))
+              .toLowerCase();
+      final isDirect = exposureType != 'inference';
+
+      final confidence = ((f['confidence'] as num?)?.toDouble() ?? 0.85).clamp(
+        0.0,
+        1.0,
+      );
+      final type =
+          f['type'] as String? ??
+          f['informationType'] as String? ??
+          f['name'] as String? ??
+          'Sensitive Feature';
+      final description = f['description'] as String? ?? '';
+      final evidence = f['evidence'] as String? ?? f['evidenceText'] as String?;
+      final recommendation =
+          f['recommendation'] as String? ??
+          f['actionableMitigation'] as String? ??
+          '';
+
+      final calibrated = DeterministicRiskEngine.calibrateElementMetrics(
+        category: category,
+        nameOrType: type,
+        rawSeverity: severityStr,
+        isDirect: isDirect,
+        confidence: confidence,
+      );
+
+      BoundingBox? bbox;
+      if (f['bounding_box'] != null && f['bounding_box'] is Map) {
+        bbox = BoundingBox.fromJson(
+          Map<String, dynamic>.from(f['bounding_box'] as Map),
+        );
+      } else if (f['boundingBox'] != null && f['boundingBox'] is Map) {
+        bbox = BoundingBox.fromJson(
+          Map<String, dynamic>.from(f['boundingBox'] as Map),
+        );
+      }
+
+      detectedElements.add(
+        DetectedElement(
+          id: 'fnd_${DateTime.now().microsecondsSinceEpoch}_$i',
+          name: type,
+          category: category,
+          riskLevel: riskLevel,
+          confidence: confidence,
+          description: description,
+          opsecImpact: isDirect
+              ? 'Direct exposure of $type poses immediate OPSEC and privacy disclosure risks.'
+              : 'Secondary contextual indicator contributing to identity or location inference.',
+          evidenceText: evidence,
+          actionableMitigation: recommendation,
+          isDirectExposure: isDirect,
+          informationType: type,
+          baseSensitivity: calibrated.baseSensitivity,
+          exploitability: calibrated.exploitability,
+          visibilityScore: calibrated.visibilityScore,
+          severityReason: calibrated.severityReason,
+          boundingBox: bbox,
+        ),
+      );
+    }
+
+    final imageSummary =
+        parsed['image_summary'] as String? ??
+        parsed['sceneDescription'] as String? ??
+        (detectedElements.isEmpty
+            ? 'No sensitive privacy risks detected in the image.'
+            : 'Visual privacy analysis of photograph.');
+
+    final inferences = (parsed['inferences'] as List? ?? [])
+        .map((e) => e.toString())
+        .toList();
+
+    final limitations = (parsed['analysis_limitations'] as List? ?? [])
+        .map((e) => e.toString())
+        .toList();
 
     return VisionAnalysisRawResult(
-      sceneDescription:
-          parsed['sceneDescription'] as String? ?? 'Visual privacy analysis',
-      detectedElements: rawElements,
+      sceneDescription: imageSummary,
+      detectedElements: detectedElements,
       rawModelMetadata: {
-        'model': targetModel,
+        'model': currentModel,
+        'provider': 'gemini',
         'durationMs': stopwatch.elapsedMilliseconds,
       },
       isLiveAi: true,
       durationMs: stopwatch.elapsedMilliseconds,
+      inferences: inferences,
+      analysisLimitations: limitations,
+      model: currentModel,
+      provider: 'gemini',
     );
   }
 }
@@ -336,9 +492,11 @@ class MockVisionProvider implements IVisionAnalysisProvider {
     return VisionAnalysisRawResult(
       sceneDescription: customSceneDescription,
       detectedElements: findings,
-      rawModelMetadata: {'provider': 'mock'},
+      rawModelMetadata: {'provider': 'mock', 'model': 'mock-engine'},
       isLiveAi: false,
       durationMs: 50,
+      model: 'mock-engine',
+      provider: 'mock',
     );
   }
 }

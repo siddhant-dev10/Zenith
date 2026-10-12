@@ -16,7 +16,7 @@ class UserSettings {
     this.useMockFallback = true,
     this.themeMode = 'dark',
     this.backendUrl = 'http://localhost:8080',
-    this.useRemoteBackend = false,
+    this.useRemoteBackend = true,
   });
 
   bool get hasApiKey => apiKey.trim().isNotEmpty;
@@ -60,7 +60,7 @@ class UserSettings {
       useMockFallback: json['useMockFallback'] as bool? ?? true,
       themeMode: json['themeMode'] as String? ?? 'dark',
       backendUrl: json['backendUrl'] as String? ?? 'http://localhost:8080',
-      useRemoteBackend: json['useRemoteBackend'] as bool? ?? false,
+      useRemoteBackend: json['useRemoteBackend'] as bool? ?? true,
     );
   }
 }

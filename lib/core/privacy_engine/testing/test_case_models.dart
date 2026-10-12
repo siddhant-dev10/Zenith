@@ -217,6 +217,8 @@ class TestCaseRunResultRecord {
   final List<String> differences;
   final int durationMs;
   final String? error;
+  final bool inconclusive;
+  final double mae;
 
   const TestCaseRunResultRecord({
     required this.testCaseId,
@@ -234,6 +236,8 @@ class TestCaseRunResultRecord {
     required this.differences,
     required this.durationMs,
     this.error,
+    this.inconclusive = false,
+    this.mae = 0.0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -252,6 +256,8 @@ class TestCaseRunResultRecord {
     'differences': differences,
     'durationMs': durationMs,
     'error': error,
+    'inconclusive': inconclusive,
+    'mae': mae,
   };
 
   factory TestCaseRunResultRecord.fromJson(Map<String, dynamic> json) {
@@ -273,6 +279,8 @@ class TestCaseRunResultRecord {
           .toList(),
       durationMs: (json['durationMs'] as num).toInt(),
       error: json['error'] as String?,
+      inconclusive: json['inconclusive'] as bool? ?? false,
+      mae: (json['mae'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
@@ -288,6 +296,10 @@ class ZenithTestRunRecord {
   final double precision;
   final double recall;
   final double f1Score;
+  final double fpr;
+  final double fnr;
+  final double categoryAccuracy;
+  final double maeScoreError;
   final double severityAccuracy;
   final int meanDurationMs;
   final String modelIdentifier;
@@ -303,6 +315,10 @@ class ZenithTestRunRecord {
     required this.precision,
     required this.recall,
     required this.f1Score,
+    this.fpr = 0.0,
+    this.fnr = 0.0,
+    this.categoryAccuracy = 100.0,
+    this.maeScoreError = 0.0,
     required this.severityAccuracy,
     required this.meanDurationMs,
     required this.modelIdentifier,
@@ -319,6 +335,10 @@ class ZenithTestRunRecord {
     'precision': precision,
     'recall': recall,
     'f1Score': f1Score,
+    'fpr': fpr,
+    'fnr': fnr,
+    'categoryAccuracy': categoryAccuracy,
+    'maeScoreError': maeScoreError,
     'severityAccuracy': severityAccuracy,
     'meanDurationMs': meanDurationMs,
     'modelIdentifier': modelIdentifier,
@@ -336,6 +356,10 @@ class ZenithTestRunRecord {
       precision: (json['precision'] as num).toDouble(),
       recall: (json['recall'] as num).toDouble(),
       f1Score: (json['f1Score'] as num).toDouble(),
+      fpr: (json['fpr'] as num?)?.toDouble() ?? 0.0,
+      fnr: (json['fnr'] as num?)?.toDouble() ?? 0.0,
+      categoryAccuracy: (json['categoryAccuracy'] as num?)?.toDouble() ?? 100.0,
+      maeScoreError: (json['maeScoreError'] as num?)?.toDouble() ?? 0.0,
       severityAccuracy: (json['severityAccuracy'] as num).toDouble(),
       meanDurationMs: (json['meanDurationMs'] as num).toInt(),
       modelIdentifier: json['modelIdentifier'] as String? ?? 'unknown',

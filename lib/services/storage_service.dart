@@ -27,6 +27,10 @@ class StorageService {
         AppConstants.sensitivityBalanced;
     final useMock = prefs.getBool(AppConstants.keyUseMockFallback) ?? true;
     final theme = prefs.getString(AppConstants.keyThemeMode) ?? 'dark';
+    final backendUrl =
+        prefs.getString(AppConstants.keyBackendUrl) ?? 'http://localhost:8080';
+    final useRemoteBackend =
+        prefs.getBool(AppConstants.keyUseRemoteBackend) ?? true;
 
     return UserSettings(
       apiKey: apiKey,
@@ -34,6 +38,8 @@ class StorageService {
       sensitivity: sensitivity,
       useMockFallback: useMock,
       themeMode: theme,
+      backendUrl: backendUrl,
+      useRemoteBackend: useRemoteBackend,
     );
   }
 
@@ -47,6 +53,11 @@ class StorageService {
       settings.useMockFallback,
     );
     await prefs.setString(AppConstants.keyThemeMode, settings.themeMode);
+    await prefs.setString(AppConstants.keyBackendUrl, settings.backendUrl);
+    await prefs.setBool(
+      AppConstants.keyUseRemoteBackend,
+      settings.useRemoteBackend,
+    );
   }
 
   // --- Audit History ---

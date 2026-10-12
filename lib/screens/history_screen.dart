@@ -293,7 +293,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${report.detectedElements.length} threats • ${report.inferredInsights.length} inferences',
+                    '${report.detectedElements.length} threats • ${report.model ?? (report.isLiveAi ? "gemini" : "heuristic")}',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 11,
                       color: AppColors.textMuted,

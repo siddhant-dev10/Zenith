@@ -385,6 +385,294 @@ void main() {
       expect(reconstituted.verificationStatus, rescanRes.verificationStatus);
     });
   });
+
+  group('Section 4 & 5 Gemini Vision Structured Schema and Independent Scoring Tests', () {
+    final validPngBytes = Uint8List.fromList([
+      0x89,
+      0x50,
+      0x4E,
+      0x47,
+      0x0D,
+      0x0A,
+      0x1A,
+      0x0A,
+      0x00,
+      0x00,
+      0x00,
+      0x0D,
+      0x49,
+      0x48,
+      0x44,
+      0x52,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x08,
+      0x06,
+      0x00,
+      0x00,
+      0x00,
+      0x1F,
+      0x15,
+      0xC4,
+      0x49,
+      0x45,
+      0x4E,
+      0x44,
+      0xAE,
+      0x42,
+      0x60,
+      0x82,
+    ]);
+
+    test('GeminiVisionProvider parses full Section 4 schema (image_summary, findings, inferences, analysis_limitations)', () async {
+      final mockPayload = {
+        'image_summary':
+            'An office desk with an employee badge and computer monitor.',
+        'findings': [
+          {
+            'category': 'identity',
+            'type': 'employee_badge',
+            'description':
+                'Corporate security badge with photo and name visible.',
+            'evidence': 'Acme Corp - Jane Doe - Eng ID #8841',
+            'confidence': 0.98,
+            'severity': 'high',
+            'exposure_type': 'direct',
+            'recommendation':
+                'Blur badge or remove photo and employee ID number.',
+            'bounding_box': {
+              'left': 0.15,
+              'top': 0.45,
+              'width': 0.2,
+              'height': 0.25,
+            },
+          },
+          {
+            'category': 'digital_security',
+            'type': 'terminal_token',
+            'description':
+                'Active bash shell showing AWS credentials environment export.',
+            'evidence': 'AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCY',
+            'confidence': 0.99,
+            'severity': 'critical',
+            'exposure_type': 'direct',
+            'recommendation':
+                'Rotate AWS key immediately and blackout terminal window.',
+            'bounding_box': {
+              'left': 0.4,
+              'top': 0.1,
+              'width': 0.5,
+              'height': 0.6,
+            },
+          },
+        ],
+        'inferences': [
+          'Affiliation with Acme Corp combined with AWS key creates targeting vector for cloud compromise.',
+        ],
+        'analysis_limitations': [
+          'Background whiteboard has partially illegible handwriting.',
+        ],
+      };
+
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'candidates': [
+              {
+                'content': {
+                  'parts': [
+                    {'text': jsonEncode(mockPayload)},
+                  ],
+                },
+              },
+            ],
+          }),
+          200,
+        );
+      });
+
+      final provider = GeminiVisionProvider(
+        apiKey: 'test-gemini-key',
+        model: 'gemini-3.5-flash',
+        httpClient: mockClient,
+      );
+
+      final result = await provider.analyze(
+        imageBytes: validPngBytes,
+        mimeType: 'image/png',
+      );
+
+      expect(
+        result.sceneDescription,
+        contains('office desk with an employee badge'),
+      );
+      expect(result.detectedElements.length, 2);
+      expect(result.detectedElements[0].name, 'employee_badge');
+      expect(result.detectedElements[0].category, ExposureCategory.identity);
+      expect(result.detectedElements[0].riskLevel, RiskLevel.high);
+      expect(result.detectedElements[0].evidenceText, contains('Jane Doe'));
+      expect(result.detectedElements[1].name, 'terminal_token');
+      expect(result.detectedElements[1].category, ExposureCategory.digital);
+      expect(result.detectedElements[1].riskLevel, RiskLevel.critical);
+      expect(result.inferences.length, 1);
+      expect(result.analysisLimitations.length, 1);
+      expect(result.provider, 'gemini');
+      expect(result.model, 'gemini-3.5-flash');
+    });
+
+    test('Clean image with zero detected risks produces score 0 and LOW risk level', () async {
+      final mockPayload = {
+        'image_summary': 'A generic landscape view of trees and mountains.',
+        'findings': [],
+        'inferences': [],
+        'analysis_limitations': [],
+      };
+
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'candidates': [
+              {
+                'content': {
+                  'parts': [
+                    {'text': jsonEncode(mockPayload)},
+                  ],
+                },
+              },
+            ],
+          }),
+          200,
+        );
+      });
+
+      final provider = GeminiVisionProvider(
+        apiKey: 'test-gemini-key',
+        httpClient: mockClient,
+      );
+      final pipeline = ZenithAnalysisPipeline(visionProvider: provider);
+
+      final report = await pipeline.execute(imageBytes: validPngBytes);
+
+      expect(report.overallScore, 0);
+      expect(report.riskLevel, RiskLevel.low);
+      expect(report.detectedElements.isEmpty, true);
+      expect(report.title, contains('Clean Baseline'));
+    });
+
+    test('Distinct images produce distinct scores and findings, resolving repeated 43/100', () async {
+      // Image A: Casual family photo with faces (Moderate risk)
+      final imageAPayload = {
+        'image_summary': 'A family portrait in a park.',
+        'findings': [
+          {
+            'category': 'identity',
+            'type': 'family_faces',
+            'description': 'Three recognizable faces.',
+            'evidence': 'Unblurred biometric portraits.',
+            'confidence': 0.85,
+            'severity': 'moderate',
+            'exposure_type': 'direct',
+            'recommendation': 'Blur faces of minors before social posting.',
+          },
+        ],
+        'inferences': [],
+        'analysis_limitations': [],
+      };
+
+      // Image B: Severe financial and passport breach (Critical risk)
+      final imageBPayload = {
+        'image_summary':
+            'Desk with international passport, credit card, and utility bill.',
+        'findings': [
+          {
+            'category': 'identity',
+            'type': 'international_passport',
+            'description': 'Passport open to MRZ machine readable zone.',
+            'evidence': 'P<USADOE<<JOHN<<<<<<<<<<<<<<<<<<',
+            'confidence': 0.99,
+            'severity': 'critical',
+            'exposure_type': 'direct',
+            'recommendation': 'Never photograph open travel passports.',
+          },
+          {
+            'category': 'personal_information',
+            'type': 'credit_card',
+            'description': 'Visa payment card with full 16-digit PAN visible.',
+            'evidence': '4111 2222 3333 4444',
+            'confidence': 0.99,
+            'severity': 'critical',
+            'exposure_type': 'direct',
+            'recommendation': 'Freeze card and request immediate reissue.',
+          },
+        ],
+        'inferences': ['Full identity theft package exposed.'],
+        'analysis_limitations': [],
+      };
+
+      final clientA = MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'candidates': [
+              {
+                'content': {
+                  'parts': [
+                    {'text': jsonEncode(imageAPayload)},
+                  ],
+                },
+              },
+            ],
+          }),
+          200,
+        ),
+      );
+      final clientB = MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'candidates': [
+              {
+                'content': {
+                  'parts': [
+                    {'text': jsonEncode(imageBPayload)},
+                  ],
+                },
+              },
+            ],
+          }),
+          200,
+        ),
+      );
+
+      final pipelineA = ZenithAnalysisPipeline(
+        visionProvider: GeminiVisionProvider(
+          apiKey: 'key',
+          httpClient: clientA,
+        ),
+      );
+      final pipelineB = ZenithAnalysisPipeline(
+        visionProvider: GeminiVisionProvider(
+          apiKey: 'key',
+          httpClient: clientB,
+        ),
+      );
+
+      final reportA = await pipelineA.execute(imageBytes: validPngBytes);
+      final reportB = await pipelineB.execute(imageBytes: validPngBytes);
+
+      // Verify that reports are image-specific and scores are not locked to 43!
+      expect(reportA.overallScore, isNot(equals(reportB.overallScore)));
+      expect(reportA.overallScore, isNot(equals(43)));
+      expect(reportB.overallScore, greaterThan(75)); // Critical
+      expect(reportB.riskLevel, RiskLevel.critical);
+      expect(reportA.detectedElements.length, 1);
+      expect(reportB.detectedElements.length, 2);
+    });
+  });
 }
 
 class _FailingVisionProvider implements IVisionAnalysisProvider {

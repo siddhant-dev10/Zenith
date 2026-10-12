@@ -44,6 +44,11 @@ class AnalyzeImageResponse {
   final String processingStatus;
   final List<String> analysisLimitations;
   final List<String> processingErrors;
+  final String? model;
+  final String? provider;
+  final String? imageSummary;
+  final String severityReason;
+  final List<Map<String, dynamic>> findingContributions;
 
   const AnalyzeImageResponse({
     required this.analysisId,
@@ -62,6 +67,11 @@ class AnalyzeImageResponse {
     this.processingStatus = 'completed',
     this.analysisLimitations = const [],
     this.processingErrors = const [],
+    this.model,
+    this.provider,
+    this.imageSummary,
+    this.severityReason = '',
+    this.findingContributions = const [],
   });
 
   factory AnalyzeImageResponse.fromReport(PrivacyAuditReport report) {
@@ -83,6 +93,27 @@ class AnalyzeImageResponse {
       processingStatus: report.processingStatus,
       analysisLimitations: report.analysisLimitations,
       processingErrors: report.processingErrors,
+      model: report.model,
+      provider: report.provider,
+      imageSummary: report.imageSummary ?? report.summary,
+      severityReason: report.severityReason.isNotEmpty
+          ? report.severityReason
+          : report.summary,
+      findingContributions: report.detectedElements
+          .map(
+            (e) => {
+              'findingId': e.id,
+              'findingName': e.name,
+              'category': e.category.id,
+              'baseSensitivity': e.baseSensitivity,
+              'exploitability': e.exploitability,
+              'visibilityScore': e.visibilityScore,
+              'confidence': e.confidence,
+              'calculatedRiskContribution': e.calculatedRiskContribution,
+              'severityReason': e.severityReason,
+            },
+          )
+          .toList(),
     );
   }
 
@@ -125,6 +156,18 @@ class AnalyzeImageResponse {
       processingErrors: (json['processingErrors'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList(),
+      model: json['model'] as String?,
+      provider: json['provider'] as String?,
+      imageSummary:
+          json['imageSummary'] as String? ??
+          (riskAssessment['executiveSummary'] as String?),
+      severityReason:
+          json['severityReason'] as String? ??
+          (riskAssessment['severityReason'] as String? ?? ''),
+      findingContributions:
+          (json['findingContributions'] as List<dynamic>? ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList(),
     );
   }
 
@@ -137,15 +180,21 @@ class AnalyzeImageResponse {
     'processingStatus': processingStatus,
     'analysisLimitations': analysisLimitations,
     'processingErrors': processingErrors,
+    'model': model,
+    'provider': provider,
+    'imageSummary': imageSummary,
+    'severityReason': severityReason,
     'riskAssessment': {
       'overallScore': overallScore,
       'severityLevel': severityLevel,
       'headline': headline,
       'executiveSummary': executiveSummary,
       'categoryScores': categoryScores,
+      'severityReason': severityReason,
     },
     'findingsCount': findings.length,
     'findings': findings,
+    'findingContributions': findingContributions,
     'inferredInsights': inferences,
     'recommendations': recommendations,
   };

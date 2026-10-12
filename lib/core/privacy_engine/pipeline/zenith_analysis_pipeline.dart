@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../../../models/exposure_category.dart';
+import '../../../models/inferred_insight.dart';
 import '../../../models/privacy_audit_report.dart';
 import '../../../models/risk_level.dart';
 import '../inference/contextual_inference_engine.dart';
@@ -84,15 +86,34 @@ class ZenithAnalysisPipeline {
       rawVisionResult.detectedElements,
     );
 
+    limitations.addAll(rawVisionResult.analysisLimitations);
+
     // Stage 4: Contextual Threat Deductions
-    final inferences = ContextualInferenceEngine.synthesizeInferences(
+    final ruleInferences = ContextualInferenceEngine.synthesizeInferences(
       deduplicatedFindings,
     );
+    final allInferences = List<InferredInsight>.from(ruleInferences);
+    for (int idx = 0; idx < rawVisionResult.inferences.length; idx++) {
+      final infStr = rawVisionResult.inferences[idx];
+      allInferences.add(
+        InferredInsight(
+          id: 'ai_inf_${DateTime.now().microsecondsSinceEpoch}_$idx',
+          category: deduplicatedFindings.isNotEmpty
+              ? deduplicatedFindings.first.category
+              : ExposureCategory.identity,
+          directObservation: rawVisionResult.sceneDescription,
+          inferredInsight: infStr,
+          attackerThreatProfile: 'Cross-referencing observed visual indicators enables correlation.',
+          severity: RiskLevel.moderate,
+          confidence: 0.85,
+        ),
+      );
+    }
 
     // Stage 5: Deterministic Mathematical Risk Scoring
     final scoreBreakdown = DeterministicRiskEngine.calculateScore(
       findings: deduplicatedFindings,
-      inferences: inferences,
+      inferences: allInferences,
     );
 
     // Stage 6: Actionable Recommendations
@@ -120,12 +141,19 @@ class ZenithAnalysisPipeline {
           'Zenith cannot confirm this asset is safe. Manual review is required before publishing.';
     } else if (deduplicatedFindings.isEmpty) {
       reportTitle = 'Clean Baseline - Minimal Privacy Risk';
-      summary = 'No sensitive visual markers or operational security risks were detected in the analyzed payload.';
+      summary =
+          rawVisionResult.sceneDescription.isNotEmpty &&
+              rawVisionResult.sceneDescription != 'Visual privacy analysis'
+          ? '${rawVisionResult.sceneDescription} No sensitive visual privacy exposures detected.'
+          : 'No sensitive visual markers or operational security risks were detected in the analyzed payload.';
     } else {
       reportTitle =
           '${scoreBreakdown.riskLevel.label} Privacy & Security Exposure';
       summary =
-          'Automated privacy audit identified ${deduplicatedFindings.length} sensitive element(s) with highest vulnerability in ${scoreBreakdown.peakCategory.displayName}.';
+          rawVisionResult.sceneDescription.isNotEmpty &&
+              rawVisionResult.sceneDescription != 'Visual privacy analysis'
+          ? '${rawVisionResult.sceneDescription} Automated audit identified ${deduplicatedFindings.length} sensitive element(s).'
+          : 'Automated privacy audit identified ${deduplicatedFindings.length} sensitive element(s) with highest vulnerability in ${scoreBreakdown.peakCategory.displayName}.';
     }
 
     return PrivacyAuditReport(
@@ -140,7 +168,7 @@ class ZenithAnalysisPipeline {
       summary: summary,
       categoryScores: scoreBreakdown.categoryScores,
       detectedElements: deduplicatedFindings,
-      inferredInsights: inferences,
+      inferredInsights: allInferences,
       recommendations: recommendations,
       exifMetadata: validation.metadata,
       isLiveAi: rawVisionResult.isLiveAi,
@@ -148,6 +176,10 @@ class ZenithAnalysisPipeline {
       processingStatus: processingStatus,
       analysisLimitations: limitations,
       processingErrors: processingErrors,
+      model: rawVisionResult.model,
+      provider: rawVisionResult.provider,
+      imageSummary: rawVisionResult.sceneDescription,
+      severityReason: scoreBreakdown.severityReason,
     );
   }
 }

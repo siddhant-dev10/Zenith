@@ -1,7 +1,3 @@
-import 'package:flutter/material.dart';
-
-import '../core/theme/app_colors.dart';
-
 enum ExposureCategory {
   identity,
   location,
@@ -19,6 +15,7 @@ enum ExposureCategory {
         return ExposureCategory.location;
       case 'digital':
       case 'digitalexposure':
+      case 'digitalsecurity':
         return ExposureCategory.digital;
       case 'personalinfo':
       case 'personalinformation':
@@ -28,6 +25,8 @@ enum ExposureCategory {
       case 'transportation':
       case 'transportationexposure':
       case 'transit':
+      case 'otherexposures':
+      case 'other':
         return ExposureCategory.transportation;
       default:
         return ExposureCategory.identity;
@@ -91,36 +90,6 @@ enum ExposureCategory {
         return 'Phone numbers, emails, QR codes, medical files, payment cards, letters';
       case ExposureCategory.transportation:
         return 'License plates, airline boarding passes, parking decals, train tickets';
-    }
-  }
-
-  Color get color {
-    switch (this) {
-      case ExposureCategory.identity:
-        return AppColors.catIdentity;
-      case ExposureCategory.location:
-        return AppColors.catLocation;
-      case ExposureCategory.digital:
-        return AppColors.catDigital;
-      case ExposureCategory.personalInfo:
-        return AppColors.catPersonalInfo;
-      case ExposureCategory.transportation:
-        return AppColors.catTransportation;
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case ExposureCategory.identity:
-        return Icons.badge_outlined;
-      case ExposureCategory.location:
-        return Icons.location_on_outlined;
-      case ExposureCategory.digital:
-        return Icons.devices_outlined;
-      case ExposureCategory.personalInfo:
-        return Icons.contact_emergency_outlined;
-      case ExposureCategory.transportation:
-        return Icons.directions_car_outlined;
     }
   }
 }

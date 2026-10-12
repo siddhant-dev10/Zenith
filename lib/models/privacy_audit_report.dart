@@ -27,6 +27,10 @@ class PrivacyAuditReport {
   processingStatus; // 'completed', 'degraded', 'partial_failure', 'failed'
   final List<String> analysisLimitations;
   final List<String> processingErrors;
+  final String? model;
+  final String? provider;
+  final String? imageSummary;
+  final String severityReason;
 
   const PrivacyAuditReport({
     required this.id,
@@ -48,6 +52,10 @@ class PrivacyAuditReport {
     this.processingStatus = 'completed',
     this.analysisLimitations = const [],
     this.processingErrors = const [],
+    this.model,
+    this.provider,
+    this.imageSummary,
+    this.severityReason = '',
   });
 
   PrivacyAuditReport copyWith({
@@ -70,6 +78,10 @@ class PrivacyAuditReport {
     String? processingStatus,
     List<String>? analysisLimitations,
     List<String>? processingErrors,
+    String? model,
+    String? provider,
+    String? imageSummary,
+    String? severityReason,
   }) {
     return PrivacyAuditReport(
       id: id ?? this.id,
@@ -91,6 +103,10 @@ class PrivacyAuditReport {
       processingStatus: processingStatus ?? this.processingStatus,
       analysisLimitations: analysisLimitations ?? this.analysisLimitations,
       processingErrors: processingErrors ?? this.processingErrors,
+      model: model ?? this.model,
+      provider: provider ?? this.provider,
+      imageSummary: imageSummary ?? this.imageSummary,
+      severityReason: severityReason ?? this.severityReason,
     );
   }
 
@@ -114,6 +130,10 @@ class PrivacyAuditReport {
       'processingStatus': processingStatus,
       'analysisLimitations': analysisLimitations,
       'processingErrors': processingErrors,
+      'model': model,
+      'provider': provider,
+      'imageSummary': imageSummary,
+      'severityReason': severityReason,
     };
   }
 
@@ -158,6 +178,11 @@ class PrivacyAuditReport {
       processingErrors: (json['processingErrors'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList(),
+      model: json['model'] as String?,
+      provider: json['provider'] as String?,
+      imageSummary:
+          json['imageSummary'] as String? ?? json['summary'] as String?,
+      severityReason: json['severityReason'] as String? ?? '',
     );
   }
 }

@@ -1,7 +1,3 @@
-import 'package:flutter/material.dart';
-
-import '../core/theme/app_colors.dart';
-
 enum RiskLevel {
   low,
   moderate,
@@ -66,45 +62,6 @@ enum RiskLevel {
         return 'Significant privacy leaks found. High potential for identity or location tracing.';
       case RiskLevel.critical:
         return 'Severe OPSEC breach detected. Sensitive PII, credentials, or tracking vectors exposed!';
-    }
-  }
-
-  Color get color {
-    switch (this) {
-      case RiskLevel.low:
-        return AppColors.riskLow;
-      case RiskLevel.moderate:
-        return AppColors.riskModerate;
-      case RiskLevel.high:
-        return AppColors.riskHigh;
-      case RiskLevel.critical:
-        return AppColors.riskCritical;
-    }
-  }
-
-  Color get bgColor {
-    switch (this) {
-      case RiskLevel.low:
-        return AppColors.riskLowBg;
-      case RiskLevel.moderate:
-        return AppColors.riskModerateBg;
-      case RiskLevel.high:
-        return AppColors.riskHighBg;
-      case RiskLevel.critical:
-        return AppColors.riskCriticalBg;
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case RiskLevel.low:
-        return Icons.verified_user_rounded;
-      case RiskLevel.moderate:
-        return Icons.info_outline_rounded;
-      case RiskLevel.high:
-        return Icons.warning_amber_rounded;
-      case RiskLevel.critical:
-        return Icons.gpp_bad_rounded;
     }
   }
 }

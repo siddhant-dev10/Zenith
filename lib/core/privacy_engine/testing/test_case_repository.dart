@@ -151,18 +151,18 @@ class ZenithTestCaseSeeder {
 
   ZenithTestCaseSeeder(this.repository);
 
-  /// Seeds the 20 standard threat categories idempotently.
+  /// Seeds initial cases only if the repository is completely empty.
   Future<int> seedInitialCases() async {
     final existing = await repository.getAll();
-    final existingIds = existing.map((e) => e.id).toSet();
+    if (existing.isNotEmpty) {
+      return 0;
+    }
     int addedCount = 0;
 
     final standardDefinitions = _buildStandard20Cases();
     for (final testCase in standardDefinitions) {
-      if (!existingIds.contains(testCase.id)) {
-        await repository.save(testCase);
-        addedCount++;
-      }
+      await repository.save(testCase);
+      addedCount++;
     }
     return addedCount;
   }
@@ -194,9 +194,9 @@ class ZenithTestCaseSeeder {
       ZenithTestCaseRecord(
         id: 'TC-02-FACES',
         name: 'Portrait of Individual in Public Setting',
-        description: 'High-resolution facial portrait exposed without consent.',
+        description: 'High-resolution facial portrait exposed in ordinary public setting.',
         category: 'faces_and_identity',
-        inputFixtureReference: 'fixtures/identity_portrait.png',
+        inputFixtureReference: 'assets/samples/sample_ordinary_portrait.png',
         expectedDetections: [
           const ExpectedDetection(
             category: 'identity',
@@ -204,11 +204,11 @@ class ZenithTestCaseSeeder {
             minConfidence: 0.85,
           ),
         ],
-        expectedSeverity: 'moderate',
-        minExpectedScore: 26,
-        maxExpectedScore: 65,
+        expectedSeverity: 'low',
+        minExpectedScore: 0,
+        maxExpectedScore: 25,
         expectedRecommendations: [
-          'Blur or mask facial biometrics before sharing.',
+          'Blur or mask facial biometrics before sharing if privacy is desired.',
         ],
         groundTruthAnnotations: [
           const GroundTruthAnnotation(

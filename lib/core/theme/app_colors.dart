@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+export 'model_ui_extensions.dart';
+
 class AppColors {
   // Deep Cyber Theme Palette (Dark)
   static const Color darkBg = Color(0xFF0A0E17);

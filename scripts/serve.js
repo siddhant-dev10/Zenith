@@ -33,8 +33,53 @@ if (!fs.existsSync(WEB_DIR)) {
 }
 
 const server = http.createServer((req, res) => {
+  // Proxy API requests directly to Zenith Privacy Engine backend (default port 8080)
+  if (
+    req.url.startsWith('/api/') ||
+    req.url.startsWith('/v1/') ||
+    req.url === '/health'
+  ) {
+    const proxyReq = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: 8080,
+        path: req.url,
+        method: req.method,
+        headers: req.headers,
+      },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res, { end: true });
+      }
+    );
+
+    proxyReq.on('error', (err) => {
+      res.writeHead(502, { 'Content-Type': 'application/problem+json' });
+      res.end(
+        JSON.stringify({
+          type: 'https://zenith.privacy/errors/backend-unreachable',
+          title: 'Zenith Engine Backend Offline',
+          status: 502,
+          detail:
+            'The Zenith backend service on port 8080 is not reachable: ' +
+            err.message +
+            '. Start it via "npm run backend" or "dart run bin/zenith_server.dart".',
+          instance: req.url,
+        })
+      );
+    });
+
+    req.pipe(proxyReq, { end: true });
+    return;
+  }
+
   // Normalize request URL
   let reqUrl = decodeURI(req.url.split('?')[0]);
+  if (reqUrl.startsWith('/Zenith/')) {
+    reqUrl = reqUrl.substring('/Zenith'.length);
+  } else if (reqUrl === '/Zenith') {
+    reqUrl = '/index.html';
+  }
   if (reqUrl === '/' || reqUrl === '') {
     reqUrl = '/index.html';
   }

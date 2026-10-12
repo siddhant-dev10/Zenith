@@ -5,6 +5,75 @@ import '../../../models/exposure_category.dart';
 import '../../../models/inferred_insight.dart';
 import '../../../models/risk_level.dart';
 
+/// Explainable risk contribution for an individual detected element.
+class FindingRiskContribution {
+  final String findingId;
+  final String findingName;
+  final ExposureCategory category;
+  final int baseSensitivity;
+  final double exploitability;
+  final double visibilityScore;
+  final double confidence;
+  final double calculatedRiskContribution; // R(f_k) = S * E * V * C
+  final String severityReason;
+
+  const FindingRiskContribution({
+    required this.findingId,
+    required this.findingName,
+    required this.category,
+    required this.baseSensitivity,
+    required this.exploitability,
+    required this.visibilityScore,
+    required this.confidence,
+    required this.calculatedRiskContribution,
+    required this.severityReason,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'findingId': findingId,
+    'findingName': findingName,
+    'category': category.id,
+    'baseSensitivity': baseSensitivity,
+    'exploitability': exploitability,
+    'visibilityScore': visibilityScore,
+    'confidence': confidence,
+    'calculatedRiskContribution': calculatedRiskContribution,
+    'severityReason': severityReason,
+  };
+
+  factory FindingRiskContribution.fromJson(Map<String, dynamic> json) {
+    return FindingRiskContribution(
+      findingId: json['findingId'] as String? ?? '',
+      findingName: json['findingName'] as String? ?? '',
+      category: ExposureCategory.fromString(
+        json['category'] as String? ?? 'identity',
+      ),
+      baseSensitivity: (json['baseSensitivity'] as num?)?.toInt() ?? 50,
+      exploitability: (json['exploitability'] as num?)?.toDouble() ?? 0.7,
+      visibilityScore: (json['visibilityScore'] as num?)?.toDouble() ?? 0.9,
+      confidence: (json['confidence'] as num?)?.toDouble() ?? 0.8,
+      calculatedRiskContribution:
+          (json['calculatedRiskContribution'] as num?)?.toDouble() ?? 0.0,
+      severityReason: json['severityReason'] as String? ?? '',
+    );
+  }
+}
+
+/// Calibrated baseline metrics for an individual detected visual feature.
+class CalibratedElementMetrics {
+  final int baseSensitivity;
+  final double exploitability;
+  final double visibilityScore;
+  final String severityReason;
+
+  const CalibratedElementMetrics({
+    required this.baseSensitivity,
+    required this.exploitability,
+    required this.visibilityScore,
+    required this.severityReason,
+  });
+}
+
 /// Detailed breakdown and audit trail of deterministic risk calculation.
 class RiskScoreBreakdown {
   final int overallScore; // 0 - 100
@@ -17,6 +86,8 @@ class RiskScoreBreakdown {
   final int rawFindingsCount;
   final int deduplicatedFindingsCount;
   final List<String> auditTrail;
+  final List<FindingRiskContribution> findingContributions;
+  final String severityReason;
 
   const RiskScoreBreakdown({
     required this.overallScore,
@@ -29,6 +100,8 @@ class RiskScoreBreakdown {
     required this.rawFindingsCount,
     required this.deduplicatedFindingsCount,
     required this.auditTrail,
+    this.findingContributions = const [],
+    this.severityReason = '',
   });
 }
 
@@ -73,6 +146,8 @@ class DeterministicRiskEngine {
         rawFindingsCount: 0,
         deduplicatedFindingsCount: 0,
         auditTrail: audit,
+        severityReason:
+            'Zero findings detected: Baseline minimal privacy risk.',
       );
     }
 
@@ -138,12 +213,15 @@ class DeterministicRiskEngine {
     final meanCatScore = sumScores / ExposureCategory.values.length;
 
     // 5. Compute Inference Synergy Amplifier Gamma(I)
-    // Gamma(I) = min(15, SUM(5.0 * confidence_j))
+    // Gamma(I) = min(15, SUM(5.0 * confidence_j)), scaled to never exceed peakCatScore * 0.35
     double rawSynergy = 0.0;
     for (final inf in inferences) {
       rawSynergy += 5.0 * inf.confidence.clamp(0.0, 1.0);
     }
-    final synergyPenalty = math.min(15.0, rawSynergy);
+    final boundedSynergy = math.min(15.0, rawSynergy);
+    final synergyPenalty = (peakCatScore > 0)
+        ? math.min(boundedSynergy, peakCatScore * 0.35)
+        : 0.0;
     if (synergyPenalty > 0) {
       audit.add(
         'Inference synergy amplifier added +${synergyPenalty.toStringAsFixed(1)} from ${inferences.length} inference(s).',
@@ -179,6 +257,41 @@ class DeterministicRiskEngine {
       'Score finalized: $finalScore/100 (${finalRiskLevel.label}) [Peak: $peakCatScore, Mean: ${meanCatScore.toStringAsFixed(1)}].',
     );
 
+    final findingContributions = deduplicated.map((f) {
+      final calibrated = calibrateElementMetrics(
+        category: f.category,
+        nameOrType: f.name,
+        rawSeverity: f.riskLevel.name,
+        isDirect: f.isDirectExposure,
+        confidence: f.confidence,
+      );
+      final reason = f.severityReason.isNotEmpty
+          ? f.severityReason
+          : calibrated.severityReason;
+
+      return FindingRiskContribution(
+        findingId: f.id,
+        findingName: f.name,
+        category: f.category,
+        baseSensitivity: f.baseSensitivity,
+        exploitability: f.exploitability,
+        visibilityScore: f.visibilityScore,
+        confidence: f.confidence,
+        calculatedRiskContribution: f.calculatedRiskContribution,
+        severityReason: reason,
+      );
+    }).toList();
+
+    final String severityReason;
+    if (finalScore == 0) {
+      severityReason = 'Clean baseline: Zero sensitive privacy elements or operational markers detected.';
+    } else if (hasCriticalCredential) {
+      severityReason = 'CRITICAL EXPOSURE: High-value unmasked credentials or sensitive identity documents detected with immediate exploitability.';
+    } else {
+      severityReason =
+          'Overall risk evaluated at $finalScore/100 (${finalRiskLevel.label}) driven by ${peakCategory.displayName} (peak domain score: $peakCatScore/100).';
+    }
+
     return RiskScoreBreakdown(
       overallScore: finalScore,
       riskLevel: finalRiskLevel,
@@ -190,6 +303,172 @@ class DeterministicRiskEngine {
       rawFindingsCount: findings.length,
       deduplicatedFindingsCount: deduplicated.length,
       auditTrail: audit,
+      findingContributions: findingContributions,
+      severityReason: severityReason,
+    );
+  }
+
+  /// Calibrates base sensitivity and exploitability based on element type and category.
+  /// Enforces explainable, low risk (0-25) for ordinary biological faces and clean scenery,
+  /// while guaranteeing high/critical impact for credential and identity documents.
+  static CalibratedElementMetrics calibrateElementMetrics({
+    required ExposureCategory category,
+    required String nameOrType,
+    required String rawSeverity,
+    required bool isDirect,
+    double confidence = 0.9,
+  }) {
+    final lower = nameOrType.trim().toLowerCase();
+    final sev = rawSeverity.trim().toLowerCase();
+
+    // 1. Critical Authentication, Shells & Plaintext Secrets (Guaranteed >= 90)
+    if (lower.contains('api_key') ||
+        lower.contains('apikey') ||
+        lower.contains('api token') ||
+        lower.contains('private key') ||
+        lower.contains('private_key') ||
+        lower.contains('secret') ||
+        lower.contains('password') ||
+        lower.contains('access token') ||
+        lower.contains('auth token') ||
+        lower.contains('terminal') ||
+        lower.contains('shell') ||
+        lower.contains('bash') ||
+        lower.contains('ssh') ||
+        lower.contains('aws') ||
+        lower.contains('sticky') ||
+        (lower.contains('credential') &&
+            !lower.contains('badge') &&
+            !lower.contains('card') &&
+            !lower.contains('pass')) ||
+        lower.contains('passport') ||
+        lower.contains('mrz') ||
+        lower.contains('bank') ||
+        lower.contains('routing') ||
+        lower.contains('medical') ||
+        lower.contains('prescription') ||
+        lower.contains('health record') ||
+        lower.contains('patient') ||
+        lower.contains('pathology') ||
+        sev == 'critical') {
+      return const CalibratedElementMetrics(
+        baseSensitivity: 100,
+        exploitability: 1.0,
+        visibilityScore: 1.0,
+        severityReason:
+            'Critical unmasked authentication secret or high-value document granting immediate exploitability.',
+      );
+    }
+
+    // 2. Ordinary Biological Human Faces / Portraits (CALIBRATED LOW RISK <= 25)
+    // Evaluated BEFORE general cards/ambient features so human faces receive calibrated low baseline.
+    if (lower.contains('face') ||
+        lower.contains('portrait') ||
+        lower.contains('person') ||
+        lower.contains('selfie') ||
+        lower.contains('human face') ||
+        lower.contains('facial') ||
+        lower.contains('biometric')) {
+      return const CalibratedElementMetrics(
+        baseSensitivity: 15,
+        exploitability: 0.20,
+        visibilityScore: 0.80,
+        severityReason:
+            'Publicly observable biological feature in ordinary context with low intrinsic exploitability.',
+      );
+    }
+
+    // 3. Explicit High Severity Findings (HIGH SEVERITY 51-75)
+    if (sev == 'high') {
+      return const CalibratedElementMetrics(
+        baseSensitivity: 80,
+        exploitability: 0.85,
+        visibilityScore: 0.90,
+        severityReason:
+            'High-value organizational badge, vehicle plate, or domicile identifier exposing trackable personal markers.',
+      );
+    }
+
+    // 3. Ambiguous numeric fragments, partial, occluded, or pixelated records (MODERATE SEVERITY 26-50)
+    // Evaluated before general badge/plate checks so degraded/partial items are not scored as full exposures.
+    if (lower.contains('ambiguous') ||
+        lower.contains('fragment') ||
+        lower.contains('partial') ||
+        lower.contains('digit') ||
+        lower.contains('pixelated') ||
+        lower.contains('occluded') ||
+        lower.contains('blurred') ||
+        sev == 'moderate' ||
+        sev == 'medium') {
+      return const CalibratedElementMetrics(
+        baseSensitivity: 50,
+        exploitability: 0.70,
+        visibilityScore: 0.85,
+        severityReason:
+            'Moderate sensitivity visual feature with contextual or secondary privacy impact.',
+      );
+    }
+
+    // 4. Benign, prop, or low severity indicators (LOW SEVERITY 0-25)
+    if (sev == 'low' ||
+        lower.contains('movie prop') ||
+        lower.contains('prop') ||
+        lower.contains('theatrical') ||
+        lower.contains('fictional') ||
+        lower.contains('poster') ||
+        lower.contains('landscape') ||
+        lower.contains('scenery') ||
+        lower.contains('clean')) {
+      return const CalibratedElementMetrics(
+        baseSensitivity: 15,
+        exploitability: 0.25,
+        visibilityScore: 0.75,
+        severityReason:
+            'Low sensitivity visual element with minimal operational risk.',
+      );
+    }
+
+    // 5. High-Value Identity, Badges, Addresses, Contact, Plates, Tickets (HIGH SEVERITY 51-75)
+    if (lower.contains('badge') ||
+        lower.contains('student') ||
+        lower.contains('employee') ||
+        lower.contains('lanyard') ||
+        lower.contains('card') ||
+        lower.contains('address') ||
+        lower.contains('house') ||
+        lower.contains('street') ||
+        lower.contains('placard') ||
+        lower.contains('plate') ||
+        lower.contains('license') ||
+        lower.contains('vehicle') ||
+        lower.contains('boarding') ||
+        lower.contains('flight') ||
+        lower.contains('pnr') ||
+        lower.contains('transit') ||
+        lower.contains('qr') ||
+        lower.contains('barcode') ||
+        lower.contains('phone') ||
+        lower.contains('email') ||
+        lower.contains('contact') ||
+        lower.contains('gps') ||
+        lower.contains('exif') ||
+        sev == 'high') {
+      return const CalibratedElementMetrics(
+        baseSensitivity: 80,
+        exploitability: 0.85,
+        visibilityScore: 0.90,
+        severityReason:
+            'High-value organizational badge, vehicle plate, or domicile identifier exposing trackable personal markers.',
+      );
+    }
+
+    // 6. Diffuse scenery, landscapes, benign displays (LOW SEVERITY 0-25)
+    return const CalibratedElementMetrics(
+      baseSensitivity: 15,
+      exploitability: 0.25,
+      visibilityScore: 0.75,
+      severityReason:
+          'Low sensitivity visual element with minimal operational risk.',
     );
   }
 

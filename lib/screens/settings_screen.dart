@@ -311,9 +311,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Column(
                 children: [
                   _buildRadioOption(
-                    title: 'Gemini 2.5 Flash',
+                    title: 'Gemini 3.5 Flash',
                     subtitle: 'Next-gen reasoning, fastest vision analysis (Recommended)',
-                    value: 'gemini-2.5-flash',
+                    value: 'gemini-3.5-flash',
                     groupValue: settings.model,
                     onChanged: (val) {
                       ref.read(settingsProvider.notifier).updateModel(val!);
@@ -321,9 +321,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const Divider(height: 20),
                   _buildRadioOption(
-                    title: 'Gemini 1.5 Flash',
-                    subtitle: 'High performance standard multimodal model',
-                    value: 'gemini-1.5-flash',
+                    title: 'Gemini 3.8 Flash',
+                    subtitle: 'Latest multimodal flagship model',
+                    value: 'gemini-3.8-flash',
                     groupValue: settings.model,
                     onChanged: (val) {
                       ref.read(settingsProvider.notifier).updateModel(val!);

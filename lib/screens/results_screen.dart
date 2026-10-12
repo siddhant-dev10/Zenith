@@ -155,7 +155,10 @@ class ResultsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      report.summary,
+                      (report.imageSummary != null &&
+                              report.imageSummary!.isNotEmpty)
+                          ? report.imageSummary!
+                          : report.summary,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
@@ -177,9 +180,11 @@ class ResultsScreen extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          report.isLiveAi
-                              ? 'Verified via Gemini Vision'
-                              : 'Zenith Onboard Threat Model',
+                          report.model != null && report.model!.isNotEmpty
+                              ? '${report.model} • ${report.provider ?? (report.isLiveAi ? "gemini" : "local")}'
+                              : (report.isLiveAi
+                                    ? 'Verified via Gemini Vision'
+                                    : 'Zenith Heuristic Engine'),
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 11,
                             color: AppColors.primaryCyan,

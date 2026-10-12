@@ -329,5 +329,61 @@ void main() {
       final allRuns = jsonDecode(listRes.body) as List;
       expect(allRuns.any((r) => (r as Map)['runId'] == run['runId']), true);
     });
+
+    test('GET /v1/audits returns persisted audit records', () async {
+      // 1. Submit an analysis first
+      final analyzeRes = await http.post(
+        Uri.parse('$baseUrl/v1/analyze'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'image': base64Encode(validPngBytes),
+          'sensitivityProfile': 'balanced',
+        }),
+      );
+      expect(analyzeRes.statusCode, HttpStatus.ok);
+
+      // 2. Query /v1/audits
+      final auditsRes = await http.get(Uri.parse('$baseUrl/v1/audits'));
+      expect(auditsRes.statusCode, HttpStatus.ok);
+      final audits = jsonDecode(auditsRes.body) as List;
+      expect(audits.isNotEmpty, true);
+      expect((audits.first as Map)['analysisId'], isNotEmpty);
+    });
+
+    test('Server with UnconfiguredVisionProvider returns HTTP 503 missing-credentials instead of mock 43', () async {
+      final unconfiguredPipeline = ZenithAnalysisPipeline(
+        visionProvider: const UnconfiguredVisionProvider(),
+      );
+      final unconfiguredServer = await startZenithServer(
+        port: 0,
+        pipeline: unconfiguredPipeline,
+        address: InternetAddress.loopbackIPv4,
+      );
+
+      try {
+        final res = await http.post(
+          Uri.parse('http://127.0.0.1:${unconfiguredServer.port}/v1/analyze'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'image': base64Encode(validPngBytes),
+            'sensitivityProfile': 'balanced',
+          }),
+        );
+
+        expect(res.statusCode, HttpStatus.serviceUnavailable);
+        final problem = jsonDecode(res.body) as Map<String, dynamic>;
+        expect(
+          problem['type'],
+          'https://zenith.privacy/errors/missing-credentials',
+        );
+        expect(problem['title'], 'Gemini Credentials Required');
+        expect(
+          problem['detail'],
+          contains('GEMINI_API_KEY environment variable is not configured'),
+        );
+      } finally {
+        await unconfiguredServer.close(force: true);
+      }
+    });
   });
 }

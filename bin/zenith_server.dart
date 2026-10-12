@@ -12,6 +12,63 @@ import 'package:zenith/core/privacy_engine/validation/image_validator.dart';
 
 // In-memory cache for generated analyses (supports GET /v1/analyses/:id)
 final Map<String, AnalyzeImageResponse> _recentAnalyses = {};
+final File _auditsFile = File('data/audits.json');
+
+Future<void> _loadStoredAudits() async {
+  if (await _auditsFile.exists()) {
+    try {
+      final content = await _auditsFile.readAsString();
+      final list = jsonDecode(content) as List;
+      for (final item in list) {
+        final resp = AnalyzeImageResponse.fromJson(
+          Map<String, dynamic>.from(item as Map),
+        );
+        _recentAnalyses[resp.analysisId] = resp;
+      }
+    } catch (e) {
+      stderr.writeln('Warning: Failed to load stored audits: $e');
+    }
+  }
+}
+
+Future<void> _saveStoredAudit(AnalyzeImageResponse response) async {
+  try {
+    _recentAnalyses[response.analysisId] = response;
+    final parentDir = _auditsFile.parent;
+    if (!await parentDir.exists()) {
+      await parentDir.create(recursive: true);
+    }
+    final allList = _recentAnalyses.values.map((r) => r.toJson()).toList();
+    await _auditsFile.writeAsString(jsonEncode(allList));
+  } catch (e) {
+    stderr.writeln('Warning: Failed to persist audit to data/audits.json: $e');
+  }
+}
+
+Map<String, String> _loadDotEnv() {
+  final envMap = <String, String>{};
+  final envFile = File('.env');
+  if (envFile.existsSync()) {
+    try {
+      final lines = envFile.readAsLinesSync();
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+        final eqIdx = trimmed.indexOf('=');
+        if (eqIdx != -1) {
+          final key = trimmed.substring(0, eqIdx).trim();
+          var val = trimmed.substring(eqIdx + 1).trim();
+          if ((val.startsWith('"') && val.endsWith('"')) ||
+              (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.substring(1, val.length - 1);
+          }
+          envMap[key] = val;
+        }
+      }
+    } catch (_) {}
+  }
+  return envMap;
+}
 
 Future<HttpServer> startZenithServer({
   required int port,
@@ -24,6 +81,7 @@ Future<HttpServer> startZenithServer({
   final trRepo = testRunRepo ?? ZenithTestRunRepository();
   final seeder = ZenithTestCaseSeeder(tcRepo);
   await seeder.seedInitialCases();
+  await _loadStoredAudits();
 
   final evaluator = ZenithTestEvaluator(
     testCaseRepo: tcRepo,
@@ -57,21 +115,31 @@ void main(List<String> args) async {
     port = int.tryParse(envPort) ?? port;
   }
 
+  final dotEnv = _loadDotEnv();
   final apiKey =
+      Platform.environment['GEMINI_API_KEY'] ??
+      dotEnv['GEMINI_API_KEY'] ??
       Platform.environment['ZENITH_GEMINI_API_KEY'] ??
-      Platform.environment['GEMINI_API_KEY'];
+      dotEnv['ZENITH_GEMINI_API_KEY'];
+
+  final model =
+      Platform.environment['GEMINI_MODEL'] ??
+      dotEnv['GEMINI_MODEL'] ??
+      'gemini-3.8-flash';
 
   final IVisionAnalysisProvider provider;
-  if (apiKey != null && apiKey.isNotEmpty) {
+  if (apiKey != null && apiKey.trim().isNotEmpty) {
     stdout.writeln(
-      'Zenith Server: Initializing with GeminiVisionProvider (Live AI).',
+      'Zenith Server: Initializing with GeminiVisionProvider (Live AI) [$model].',
     );
-    provider = GeminiVisionProvider(apiKey: apiKey);
+    provider = GeminiVisionProvider(apiKey: apiKey.trim(), model: model);
   } else {
     stdout.writeln(
-      'Zenith Server: Initializing with MockVisionProvider (Deterministic Heuristic Mode).',
+      'Zenith Server: GEMINI_API_KEY is not set. Real image analysis will report missing credentials (503).',
     );
-    provider = MockVisionProvider();
+    provider = const UnconfiguredVisionProvider(
+      message: 'GEMINI_API_KEY is not configured on the server. Please supply GEMINI_API_KEY in environment or .env file to enable live image analysis.',
+    );
   }
 
   final pipeline = ZenithAnalysisPipeline(visionProvider: provider);
@@ -85,6 +153,9 @@ void main(List<String> args) async {
   stdout.writeln('  Health check: http://localhost:${server.port}/health');
   stdout.writeln(
     '  Analyze API:  POST http://localhost:${server.port}/api/v1/analyze',
+  );
+  stdout.writeln(
+    '  Audits API:   GET  http://localhost:${server.port}/api/v1/audits',
   );
   stdout.writeln(
     '  Test Cases:   GET  http://localhost:${server.port}/api/v1/test-cases',
@@ -139,14 +210,32 @@ Future<void> handleRequest(
         (path == '/' || path == '/health' || path == '/api/v1/health')) {
       res.statusCode = HttpStatus.ok;
       res.headers.contentType = ContentType.json;
+      final isConfigured =
+          pipeline.visionProvider is! UnconfiguredVisionProvider;
       res.write(
         jsonEncode({
           'status': 'healthy',
           'service': 'zenith-privacy-intelligence-engine',
           'version': '1.0.0',
+          'geminiConfigured': isConfigured,
+          'provider': pipeline.visionProvider is GeminiVisionProvider
+              ? 'gemini'
+              : (isConfigured ? 'mock' : 'unconfigured'),
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );
+      await res.close();
+      return;
+    }
+
+    // Audits List Endpoint (GET /v1/audits or /api/v1/audits)
+    if (request.method == 'GET' &&
+        (path == '/v1/audits' || path == '/api/v1/audits')) {
+      res.statusCode = HttpStatus.ok;
+      res.headers.contentType = ContentType.json;
+      final audits = _recentAnalyses.values.toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      res.write(jsonEncode(audits.map((a) => a.toJson()).toList()));
       await res.close();
       return;
     }
@@ -170,14 +259,16 @@ Future<void> handleRequest(
         return;
       }
 
-      final imageRaw = body['image'] as String?;
+      final imageRaw =
+          (body['image'] ?? body['image_bytes'] ?? body['imageBytes'])
+              as String?;
       if (imageRaw == null || imageRaw.isEmpty) {
         _sendError(
           res,
           HttpStatus.badRequest,
           type: 'https://zenith.privacy/errors/missing-image',
           title: 'Missing Image Field',
-          detail: 'Request body must contain base64 encoded "image" field.',
+          detail: 'Request body must contain base64 encoded "image" or "image_bytes" field.',
           instance: path,
         );
         return;
@@ -203,6 +294,26 @@ Future<void> handleRequest(
 
       final sensitivity = body['sensitivityProfile'] as String? ?? 'balanced';
       final clientRequestId = body['clientRequestId'] as String?;
+      final requestedMime =
+          body['mime_type'] as String? ?? body['mimeType'] as String?;
+      if (requestedMime != null &&
+          ![
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+          ].contains(requestedMime.toLowerCase())) {
+        _sendError(
+          res,
+          HttpStatus.unsupportedMediaType,
+          type: 'https://zenith.privacy/errors/unsupported-media-type',
+          title: 'Unsupported Media Type',
+          detail:
+              'MIME type "$requestedMime" is not supported. Zenith accepts image/jpeg, image/png, image/webp.',
+          instance: path,
+          requestId: clientRequestId,
+        );
+        return;
+      }
 
       try {
         final report = await pipeline.execute(
@@ -211,7 +322,7 @@ Future<void> handleRequest(
         );
 
         final apiResponse = AnalyzeImageResponse.fromReport(report);
-        _recentAnalyses[apiResponse.analysisId] = apiResponse;
+        await _saveStoredAudit(apiResponse);
 
         res.statusCode = HttpStatus.ok;
         res.headers.contentType = ContentType.json;
@@ -231,15 +342,22 @@ Future<void> handleRequest(
         final status = e.isRateLimit
             ? HttpStatus.tooManyRequests
             : (e.statusCode ?? HttpStatus.badGateway);
+        final isAuthOrConfig =
+            status == HttpStatus.unauthorized ||
+            status == HttpStatus.serviceUnavailable;
         _sendError(
           res,
           status,
-          type: e.isRateLimit
-              ? 'https://zenith.privacy/errors/rate-limit-exceeded'
-              : 'https://zenith.privacy/errors/vision-provider-failed',
-          title: e.isRateLimit
-              ? 'Rate Limit Exceeded'
-              : 'Vision Provider Failed',
+          type: isAuthOrConfig
+              ? 'https://zenith.privacy/errors/missing-credentials'
+              : (e.isRateLimit
+                    ? 'https://zenith.privacy/errors/rate-limit-exceeded'
+                    : 'https://zenith.privacy/errors/vision-provider-failed'),
+          title: isAuthOrConfig
+              ? 'Gemini Credentials Required'
+              : (e.isRateLimit
+                    ? 'Rate Limit Exceeded'
+                    : 'Vision Provider Failed'),
           detail: e.message,
           instance: path,
           requestId: clientRequestId,

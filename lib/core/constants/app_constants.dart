@@ -3,7 +3,7 @@ class AppConstants {
   static const String appVersion = '1.0.0';
   static const String tagline =
       'AI-Powered Privacy & Security Risk Assessment System';
-  static const String defaultGeminiModel = 'gemini-2.5-flash';
+  static const String defaultGeminiModel = 'gemini-3.5-flash';
   static const String fallbackGeminiModel = 'gemini-1.5-flash';
 
   // SharedPreferences keys
@@ -13,6 +13,8 @@ class AppConstants {
   static const String keyAuditHistory = 'zenith_audit_history';
   static const String keyThemeMode = 'zenith_theme_mode';
   static const String keyUseMockFallback = 'zenith_use_mock_fallback';
+  static const String keyBackendUrl = 'zenith_backend_url';
+  static const String keyUseRemoteBackend = 'zenith_use_remote_backend';
 
   // Sensitivity modes
   static const String sensitivityConservative = 'Conservative';

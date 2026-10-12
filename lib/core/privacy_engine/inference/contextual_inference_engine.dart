@@ -23,13 +23,34 @@ class ContextualInferenceEngine {
           f.name.toLowerCase().contains(typeSnippet.toLowerCase()),
     );
 
-    // Rule 1: Student or Corporate ID + Location or Schedule
-    final idFindings = findings.where(
-      (f) =>
-          f.category == ExposureCategory.identity ||
-          f.informationType.toLowerCase().contains('id') ||
-          f.informationType.toLowerCase().contains('badge'),
-    );
+    // Rule 1: Student or Corporate ID + Location or Schedule (EXCLUDE ordinary faces)
+    final idFindings = findings.where((f) {
+      final lowerName = f.name.toLowerCase();
+      final lowerType = f.informationType.toLowerCase();
+      final isFace =
+          lowerName.contains('face') ||
+          lowerType.contains('face') ||
+          lowerName.contains('portrait') ||
+          lowerType.contains('portrait') ||
+          lowerName.contains('person') ||
+          lowerType.contains('person') ||
+          lowerName.contains('selfie') ||
+          lowerType.contains('selfie');
+      if (isFace) return false;
+
+      return lowerName.contains('badge') ||
+          lowerType.contains('badge') ||
+          lowerName.contains('student id') ||
+          lowerType.contains('student_id') ||
+          lowerName.contains('campus card') ||
+          lowerType.contains('campus_card') ||
+          lowerName.contains('employee') ||
+          lowerType.contains('employee') ||
+          lowerName.contains('lanyard') ||
+          lowerType.contains('lanyard') ||
+          lowerName.contains('id card') ||
+          lowerType.contains('id_card');
+    });
     final locationFindings = findings.where(
       (f) =>
           f.category == ExposureCategory.location ||
@@ -88,15 +109,26 @@ class ContextualInferenceEngine {
       );
     }
 
-    // Rule 3: Digital Terminal / Cloud Credentials
-    final digitalFindings = findings.where(
-      (f) =>
-          f.category == ExposureCategory.digital ||
-          f.name.toLowerCase().contains('key') ||
-          f.name.toLowerCase().contains('credential') ||
-          f.name.toLowerCase().contains('terminal') ||
-          f.informationType.toLowerCase().contains('credential'),
-    );
+    // Rule 3: Digital Terminal / Cloud Credentials (EXCLUDE blank/benign screens)
+    final digitalFindings = findings.where((f) {
+      final lowerName = f.name.toLowerCase();
+      final lowerType = f.informationType.toLowerCase();
+      return lowerName.contains('key') ||
+          lowerType.contains('key') ||
+          lowerName.contains('credential') ||
+          lowerType.contains('credential') ||
+          lowerName.contains('token') ||
+          lowerType.contains('token') ||
+          lowerName.contains('password') ||
+          lowerType.contains('password') ||
+          lowerName.contains('secret') ||
+          lowerType.contains('secret') ||
+          lowerName.contains('terminal') ||
+          lowerType.contains('terminal') ||
+          (f.baseSensitivity >= 70 &&
+              f.evidenceText != null &&
+              f.evidenceText!.isNotEmpty);
+    });
 
     if (digitalFindings.isNotEmpty) {
       final primaryDigital = digitalFindings.first;

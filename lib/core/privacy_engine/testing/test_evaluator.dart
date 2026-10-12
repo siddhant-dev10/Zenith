@@ -6,6 +6,7 @@ import '../../../models/exposure_category.dart';
 import '../../../models/risk_level.dart';
 import '../pipeline/zenith_analysis_pipeline.dart';
 import '../providers/vision_analysis_provider.dart';
+import '../scoring/deterministic_risk_engine.dart';
 import 'test_case_models.dart';
 import 'test_case_repository.dart';
 
@@ -83,13 +84,17 @@ class ZenithTestEvaluator {
     int totalTp = 0;
     int totalFp = 0;
     int totalFn = 0;
+    int totalTn = 0;
     int correctSeverityCount = 0;
+    int correctCategoryCount = 0;
+    double totalMae = 0.0;
 
     for (final testCase in targetCases) {
       final result = await _executeSingleTestCase(testCase);
       results.add(result);
       if (result.passed) passedCount++;
       totalDurationMs += result.durationMs;
+      totalMae += result.mae;
 
       // Evaluation metrics accumulation
       if (result.expectedSeverity.toLowerCase() ==
@@ -97,11 +102,20 @@ class ZenithTestEvaluator {
         correctSeverityCount++;
       }
 
+      // Category accuracy accumulation
+      if (result.expectedDetectionsCount == 0 &&
+          result.actualDetectionsCount == 0) {
+        correctCategoryCount++;
+      } else if (result.expectedDetectionsCount > 0 &&
+          result.actualDetectionsCount > 0) {
+        correctCategoryCount++;
+      }
+
       final expectedCount = result.expectedDetectionsCount;
       final actualCount = result.actualDetectionsCount;
 
       if (expectedCount == 0 && actualCount == 0) {
-        totalTp += 1; // True negative counts towards alignment
+        totalTn += 1; // True negative counts towards alignment
       } else {
         final tp = expectedCount > actualCount ? actualCount : expectedCount;
         final fp = actualCount > expectedCount
@@ -129,6 +143,12 @@ class ZenithTestEvaluator {
     final f1Score = (precision + recall) > 0
         ? 2 * (precision * recall) / (precision + recall)
         : 1.0;
+    final fpr = (totalFp + totalTn) > 0 ? totalFp / (totalFp + totalTn) : 0.0;
+    final fnr = (totalFn + totalTp) > 0 ? totalFn / (totalFn + totalTp) : 0.0;
+    final categoryAccuracy = totalCases > 0
+        ? (correctCategoryCount / totalCases) * 100.0
+        : 100.0;
+    final maeScoreError = totalCases > 0 ? totalMae / totalCases : 0.0;
     final severityAccuracy = totalCases > 0
         ? (correctSeverityCount / totalCases) * 100.0
         : 100.0;
@@ -146,6 +166,10 @@ class ZenithTestEvaluator {
       precision: double.parse(precision.toStringAsFixed(3)),
       recall: double.parse(recall.toStringAsFixed(3)),
       f1Score: double.parse(f1Score.toStringAsFixed(3)),
+      fpr: double.parse(fpr.toStringAsFixed(3)),
+      fnr: double.parse(fnr.toStringAsFixed(3)),
+      categoryAccuracy: double.parse(categoryAccuracy.toStringAsFixed(1)),
+      maeScoreError: double.parse(maeScoreError.toStringAsFixed(2)),
       severityAccuracy: double.parse(severityAccuracy.toStringAsFixed(1)),
       meanDurationMs: meanDurationMs,
       modelIdentifier: modelIdentifier ?? 'zenith-pipeline-v1',
@@ -164,30 +188,41 @@ class ZenithTestEvaluator {
     String? executionError;
 
     Uint8List imageBytes;
+    bool isFixtureMissing = false;
     final file = File(testCase.inputFixtureReference);
     if (file.existsSync()) {
       imageBytes = await file.readAsBytes();
     } else {
+      isFixtureMissing = true;
       imageBytes = _fallbackPngBytes;
+      differences.add(
+        'Input fixture file missing from disk: ${testCase.inputFixtureReference}',
+      );
     }
 
     try {
       // Create dedicated pipeline runner for this test case
       final ZenithAnalysisPipeline runner;
-      if (testCase.id == 'TC-20-DEGRADED-DETECTOR') {
+      if (testCase.id == 'TC-20-DEGRADED-DETECTOR' ||
+          testCase.id == 'TC-120-DEGRADED-DETECTOR') {
         // Specifically simulate detector fault
         runner = ZenithAnalysisPipeline(
           visionProvider: _SimulatedFailingProvider(),
         );
       } else {
-        // Construct findings based on test case ground truth annotations
+        // Construct findings based on test case ground truth annotations and calibrate metrics
         final List<DetectedElement> mockFindings = testCase
             .groundTruthAnnotations
             .map((gt) {
               final cat = _mapCategory(gt.category);
-              final isCritical =
-                  testCase.expectedSeverity.toLowerCase() == 'critical';
-              final isHigh = testCase.expectedSeverity.toLowerCase() == 'high';
+              final calibrated =
+                  DeterministicRiskEngine.calibrateElementMetrics(
+                    category: cat,
+                    nameOrType: gt.label,
+                    rawSeverity: testCase.expectedSeverity,
+                    isDirect: true,
+                    confidence: 0.95,
+                  );
 
               return DetectedElement(
                 id: 'fnd_${gt.label.replaceAll(' ', '_').toLowerCase()}',
@@ -195,9 +230,10 @@ class ZenithTestEvaluator {
                 category: cat,
                 riskLevel: _mapSeverityToRisk(testCase.expectedSeverity),
                 confidence: 0.98,
-                baseSensitivity: isCritical ? 100 : (isHigh ? 85 : 45),
-                exploitability: isCritical ? 1.0 : (isHigh ? 0.90 : 0.65),
-                visibilityScore: isCritical ? 1.0 : 0.90,
+                baseSensitivity: calibrated.baseSensitivity,
+                exploitability: calibrated.exploitability,
+                visibilityScore: calibrated.visibilityScore,
+                severityReason: calibrated.severityReason,
                 evidenceText: gt.sensitiveText,
                 description: 'Identified ${gt.label}',
                 opsecImpact: 'Exposes sensitive target marker if shared online',
@@ -244,8 +280,9 @@ class ZenithTestEvaluator {
       final scoreMidpoint =
           ((testCase.minExpectedScore + testCase.maxExpectedScore) / 2).round();
       final scoreDelta = actualScore - scoreMidpoint;
+      final mae = scoreDelta.abs().toDouble();
 
-      final passed = differences.isEmpty;
+      final passed = differences.isEmpty && !isFixtureMissing;
 
       return TestCaseRunResultRecord(
         testCaseId: testCase.id,
@@ -262,6 +299,8 @@ class ZenithTestEvaluator {
         actualDetectionsCount: report.detectedElements.length,
         differences: differences,
         durationMs: sw.elapsedMilliseconds,
+        inconclusive: isFixtureMissing,
+        mae: mae,
       );
     } catch (e) {
       sw.stop();
@@ -284,6 +323,8 @@ class ZenithTestEvaluator {
         differences: differences,
         durationMs: sw.elapsedMilliseconds,
         error: executionError,
+        inconclusive: false,
+        mae: 50.0,
       );
     }
   }
@@ -294,27 +335,38 @@ class ZenithTestEvaluator {
       case 'faces_and_identity':
       case 'student_ids':
       case 'employee_badges':
+      case 'physical_access_badges':
       case 'government_documents':
         return ExposureCategory.identity;
       case 'location':
       case 'addresses_and_locations':
+      case 'geolocation_and_addresses':
       case 'metadata_exposure':
         return ExposureCategory.location;
       case 'vehicle_plates':
       case 'transportation':
+      case 'vehicles_and_transport':
         return ExposureCategory.transportation;
       case 'digital':
       case 'digital_security':
       case 'computer_screens':
       case 'exposed_credentials':
+      case 'digital_credentials':
+      case 'screens_and_dashboards':
       case 'qr_and_barcodes':
         return ExposureCategory.digital;
       case 'personal_info':
       case 'contact_information':
       case 'financial_documents':
+      case 'financial_instruments':
       case 'travel_documents':
+      case 'travel_and_logistics':
+      case 'medical_and_health':
+      case 'medical_records':
+      case 'clean_photographs':
       case 'blurred_information':
       case 'ambiguous_cases':
+      case 'adversarial_and_edge':
       default:
         return ExposureCategory.personalInfo;
     }

@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import '../core/constants/app_constants.dart';
 import '../core/network/api_config.dart';
 
@@ -26,10 +28,22 @@ class UserSettings {
     if (raw.isEmpty) {
       return ApiConfig.getDefaultBackendUrl();
     }
-    // Auto-migrate legacy default 'http://localhost:8080' to emulator URL on Android
-    if (ApiConfig.getDefaultBackendUrl() == ApiConfig.defaultEmulatorUrl &&
-        (raw == 'http://localhost:8080' || raw == 'http://127.0.0.1:8080')) {
-      return ApiConfig.defaultEmulatorUrl;
+    // Auto-migrate legacy defaults when compiled with explicit BACKEND_URL
+    if (ApiConfig.hasCompileTimeOverride &&
+        (raw == ApiConfig.defaultEmulatorUrl ||
+         raw == ApiConfig.defaultLocalhostUrl ||
+         raw == 'http://127.0.0.1:8080')) {
+      return ApiConfig.getDefaultBackendUrl();
+    }
+    // On physical Android devices where 10.0.2.2 or localhost fails,
+    // auto-migrate legacy stored values to reachable LAN URL
+    if (!kIsWeb &&
+        Platform.isAndroid &&
+        ApiConfig.getDefaultBackendUrl() == ApiConfig.defaultLanUrl &&
+        (raw == ApiConfig.defaultEmulatorUrl ||
+         raw == ApiConfig.defaultLocalhostUrl ||
+         raw == 'http://127.0.0.1:8080')) {
+      return ApiConfig.defaultLanUrl;
     }
     return ApiConfig.sanitizeUrl(raw);
   }

@@ -58,5 +58,21 @@ void main() {
 
       expect(revived.backendUrl, equals('https://custom.zenith.corp:8443'));
     });
+
+    test('ApiConfig provides reachable defaultLanUrl for physical mobile devices', () {
+      expect(ApiConfig.defaultLanUrl, equals('http://192.168.0.16:8080'));
+    });
+
+    test('ApiConfig.diagnoseConnectionError handles 10.0.2.2 connection refusal diagnostic', () {
+      final error = const SocketException('Connection refused (OS Error: Connection refused, errno = 111)');
+      final diag = ApiConfig.diagnoseConnectionError(error, 'http://10.0.2.2:8080');
+      // On non-Android test runner, it provides server guide; on Android it provides 10.0.2.2 physical guide
+      if (Platform.isAndroid) {
+        expect(diag, contains('Android Emulator'));
+        expect(diag, contains('Physical Phone'));
+      } else {
+        expect(diag, contains('Unable to connect to Zenith backend at http://10.0.2.2:8080'));
+      }
+    });
   });
 }

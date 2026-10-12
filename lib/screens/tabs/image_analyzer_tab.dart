@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/network/api_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/privacy_audit_report.dart';
 import '../../providers/audit_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../services/sample_data_service.dart';
 import '../analysis_screen.dart';
 import '../camera_screen.dart';
 import '../history_screen.dart';
 import '../results_screen.dart';
+import '../settings_screen.dart';
 import '../widgets/cyber_glass_card.dart';
 
 class ImageAnalyzerTab extends ConsumerStatefulWidget {
@@ -33,6 +36,7 @@ class _ImageAnalyzerTabState extends ConsumerState<ImageAnalyzerTab> {
   @override
   Widget build(BuildContext context) {
     final auditState = ref.watch(auditProvider);
+    final settings = ref.watch(settingsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return CustomScrollView(
@@ -97,6 +101,89 @@ class _ImageAnalyzerTabState extends ConsumerState<ImageAnalyzerTab> {
                       fontSize: 13,
                       color: AppColors.textMuted,
                       height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Live Backend Endpoint Indicator
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: settings.backendUrl == ApiConfig.defaultLanUrl
+                            ? AppColors.primaryCyan.withOpacity(0.4)
+                            : (isDark ? Colors.white12 : Colors.black12),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.lan_rounded,
+                          size: 14,
+                          color: settings.backendUrl == ApiConfig.defaultLanUrl
+                              ? AppColors.primaryCyan
+                              : AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Endpoint: ${settings.backendUrl}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              color: isDark ? AppColors.textWhite : AppColors.textDark,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (settings.backendUrl != ApiConfig.defaultLanUrl) ...[
+                          const SizedBox(width: 6),
+                          InkWell(
+                            onTap: () async {
+                              await ref
+                                  .read(settingsProvider.notifier)
+                                  .updateBackendUrl(ApiConfig.defaultLanUrl);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Switched backend to Wi-Fi LAN (${ApiConfig.defaultLanUrl})'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryCyan.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Use LAN',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primaryCyan,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(width: 4),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                          icon: const Icon(Icons.settings_outlined, size: 14),
+                          color: AppColors.textMuted,
+                          tooltip: 'Configure Backend',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ],

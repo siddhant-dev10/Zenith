@@ -9,6 +9,9 @@ class ApiConfig {
   /// Standard Android emulator loopback alias to host machine's 127.0.0.1.
   static const String defaultEmulatorUrl = 'http://10.0.2.2:8080';
 
+  /// Standard development Mac Wi-Fi LAN address for physical Android devices.
+  static const String defaultLanUrl = 'http://192.168.0.16:8080';
+
   /// Default production / staging HTTPS backend template (if configured).
   static const String defaultProductionUrl = 'https://api.zenith.privacy';
 
@@ -17,6 +20,9 @@ class ApiConfig {
     'BACKEND_URL',
     defaultValue: '',
   );
+
+  /// Whether a compile-time backend URL override was provided.
+  static bool get hasCompileTimeOverride => _compileTimeBackendUrl.trim().isNotEmpty;
 
   /// Resolves the recommended default backend URL based on platform & environment.
   static String getDefaultBackendUrl() {
@@ -31,11 +37,11 @@ class ApiConfig {
     }
 
     // 3. Android platform (physical device or emulator)
-    // On Android, localhost (127.0.0.1) points to the phone/emulator itself,
-    // which causes SocketException: Connection refused (errno = 111).
-    // The emulator requires 10.0.2.2 to reach the host development computer.
+    // On physical Android devices, 10.0.2.2 causes SocketException Connection Refused (errno = 111)
+    // because 10.0.2.2 is reserved strictly for the QEMU emulator. The development Mac's Wi-Fi
+    // LAN IP (defaultLanUrl) is reachable from both physical Android phones over Wi-Fi and emulators!
     if (Platform.isAndroid) {
-      return defaultEmulatorUrl;
+      return defaultLanUrl;
     }
 
     // 4. iOS Simulator, macOS, Windows, Linux
@@ -72,10 +78,19 @@ class ApiConfig {
     if (isAndroid && (host == 'localhost' || host == '127.0.0.1')) {
       return 'Connection Refused: On Android, "localhost" refers to the device itself, '
           'not your development computer.\n\n'
+          '• If using a Physical Phone on Wi-Fi: Switch backend URL to "$defaultLanUrl".\n'
+          '• If using a Physical Phone on USB: Run "adb reverse tcp:8080 tcp:8080" over USB.\n'
           '• If using an Android Emulator: Switch backend URL to "$defaultEmulatorUrl".\n'
-          '• If using a Physical Phone: Enter your computer\'s Wi-Fi LAN IP (e.g. http://192.168.x.x:8080) '
-          'or run "adb reverse tcp:8080 tcp:8080" over USB.\n'
           '• Configure this anytime in Settings > Backend Configuration.';
+    }
+
+    // Case 1b: 10.0.2.2 on Physical Android Device (Connection Refused errno 111)
+    if (isAndroid && host == '10.0.2.2') {
+      return 'Connection Refused: "10.0.2.2" is only reachable inside the Android Emulator.\n\n'
+          'Your physical phone cannot reach 10.0.2.2.\n'
+          '• Physical Phone on Wi-Fi: Switch backend URL to your Mac\'s LAN IP ("$defaultLanUrl").\n'
+          '• Physical Phone on USB: Run "adb reverse tcp:8080 tcp:8080" and use "http://localhost:8080".\n'
+          '• Tap "Switch to Wi-Fi LAN" or configure in Settings.';
     }
 
     // Case 2: Cleartext HTTP blocked by Android OS

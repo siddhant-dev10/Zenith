@@ -475,11 +475,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
+                          _buildPresetChip('📱 Wi-Fi LAN', ApiConfig.defaultLanUrl),
+                          const SizedBox(width: 8),
                           _buildPresetChip('🤖 Emulator', ApiConfig.defaultEmulatorUrl),
                           const SizedBox(width: 8),
                           _buildPresetChip('💻 Localhost', ApiConfig.defaultLocalhostUrl),
-                          const SizedBox(width: 8),
-                          _buildPresetChip('📱 Wi-Fi LAN', 'http://192.168.0.16:8080'),
                           const SizedBox(width: 8),
                           _buildPresetChip('🔒 Prod HTTPS', ApiConfig.defaultProductionUrl),
                         ],

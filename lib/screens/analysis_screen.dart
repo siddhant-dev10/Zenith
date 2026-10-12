@@ -6,10 +6,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/network/api_config.dart';
 import '../core/theme/app_colors.dart';
 import '../providers/audit_provider.dart';
 import '../providers/settings_provider.dart';
 import 'results_screen.dart';
+import 'settings_screen.dart';
 import 'widgets/cyber_glass_card.dart';
 import 'widgets/glowing_scanner_hud.dart';
 
@@ -178,59 +180,128 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
                         if (isError)
                           Container(
                             color: Colors.black87,
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.error_outline_rounded,
-                                  size: 48,
-                                  color: AppColors.riskCritical,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Analysis Failed',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline_rounded,
+                                    size: 42,
+                                    color: AppColors.riskCritical,
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  auditState.errorMessage ?? 'An unexpected error occurred during scan.',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 12,
-                                    color: AppColors.textMuted,
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'Analysis Failed',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 20),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    OutlinedButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.white,
-                                        side: const BorderSide(
-                                          color: AppColors.darkBorder,
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.04),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.08),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      auditState.errorMessage ??
+                                          'An unexpected error occurred during scan.',
+                                      textAlign: TextAlign.left,
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11,
+                                        color: AppColors.textMuted,
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  if ((auditState.errorMessage ?? '').toLowerCase().contains('connection') ||
+                                      (auditState.errorMessage ?? '').toLowerCase().contains('10.0.2.2') ||
+                                      (auditState.errorMessage ?? '').toLowerCase().contains('localhost') ||
+                                      (auditState.errorMessage ?? '').toLowerCase().contains('socket') ||
+                                      (auditState.errorMessage ?? '').toLowerCase().contains('timed out')) ...[
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: () async {
+                                          await ref
+                                              .read(settingsProvider.notifier)
+                                              .updateBackendUrl(ApiConfig.defaultLanUrl);
+                                          _startAnalysis();
+                                        },
+                                        icon: const Icon(Icons.wifi_rounded, size: 16),
+                                        label: Text(
+                                          'Connect to Mac (${ApiConfig.defaultLanUrl})',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primaryCyan,
+                                          foregroundColor: Colors.black,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
                                         ),
                                       ),
-                                      child: const Text('Back'),
                                     ),
-                                    const SizedBox(width: 12),
-                                    ElevatedButton(
-                                      onPressed: _startAnalysis,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primaryCyan,
-                                        foregroundColor: AppColors.darkBg,
-                                      ),
-                                      child: const Text('Retry Scan'),
-                                    ),
+                                    const SizedBox(height: 10),
                                   ],
-                                ),
-                              ],
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    alignment: WrapAlignment.center,
+                                    children: [
+                                      OutlinedButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.white,
+                                          side: const BorderSide(
+                                            color: AppColors.darkBorder,
+                                          ),
+                                        ),
+                                        child: const Text('Back'),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => const SettingsScreen(),
+                                            ),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.settings_outlined, size: 16),
+                                        label: const Text('Settings'),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppColors.primaryCyan,
+                                          side: const BorderSide(
+                                            color: AppColors.primaryCyan,
+                                          ),
+                                        ),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: _startAnalysis,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primaryCyan,
+                                          foregroundColor: AppColors.darkBg,
+                                        ),
+                                        child: const Text('Retry Scan'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                       ],

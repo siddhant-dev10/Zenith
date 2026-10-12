@@ -1,0 +1,26 @@
+{
+  "name": "project-zenith",
+  "version": "1.0.0",
+  "description": "Zenith — AI-Powered Privacy Intelligence & Risk Assessment System",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "dev": "flutter run -d chrome --web-port=8000",
+    "serve": "node scripts/serve.js",
+    "backend": "dart run bin/zenith_server.dart",
+    "build": "flutter build web",
+    "test": "flutter test",
+    "analyze": "flutter analyze",
+    "format": "dart format ."
+  },
+  "keywords": [
+    "privacy",
+    "intelligence",
+    "computer-vision",
+    "opsec",
+    "risk-assessment",
+    "flutter"
+  ],
+  "author": "Zenith Engineering Team",
+  "license": "UNLICENSED"
+}

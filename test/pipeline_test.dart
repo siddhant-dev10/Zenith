@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:zenith/core/privacy_engine/api/zenith_api_contract.dart';
 import 'package:zenith/core/privacy_engine/pipeline/zenith_analysis_pipeline.dart';
 import 'package:zenith/core/privacy_engine/providers/vision_analysis_provider.dart';
@@ -99,6 +102,190 @@ void main() {
         true,
       );
     });
+
+    test('Pipeline enters partial failure and enforces risk floor >= 50 when provider fails with allowDegradedFallback=true', () async {
+      final failingProvider = _FailingVisionProvider(
+        const VisionProviderException('Simulated upstream API timeout'),
+      );
+      final pipeline = ZenithAnalysisPipeline(visionProvider: failingProvider);
+
+      final report = await pipeline.execute(
+        imageBytes: validPngBytes,
+        allowDegradedFallback: true,
+      );
+
+      expect(report.processingStatus, 'partial_failure');
+      expect(report.processingErrors.isNotEmpty, true);
+      expect(
+        report.processingErrors.first,
+        contains('Simulated upstream API timeout'),
+      );
+      expect(report.analysisLimitations.isNotEmpty, true);
+      // Safety floor: failed detector must NEVER emit score < 50
+      expect(report.overallScore >= 50, true);
+      expect(report.riskLevel != RiskLevel.low, true);
+    });
+
+    test('Pipeline rethrows exception when provider fails with allowDegradedFallback=false', () async {
+      final failingProvider = _FailingVisionProvider(
+        const VisionProviderException('Simulated unhandled AI failure'),
+      );
+      final pipeline = ZenithAnalysisPipeline(visionProvider: failingProvider);
+
+      expect(
+        () => pipeline.execute(
+          imageBytes: validPngBytes,
+          allowDegradedFallback: false,
+        ),
+        throwsA(isA<VisionProviderException>()),
+      );
+    });
+  });
+
+  group('GeminiVisionProvider Malformed Response & Error Handling Tests', () {
+    final validPngBytes = Uint8List.fromList([
+      0x89,
+      0x50,
+      0x4E,
+      0x47,
+      0x0D,
+      0x0A,
+      0x1A,
+      0x0A,
+      0x00,
+      0x00,
+      0x00,
+      0x0D,
+      0x49,
+      0x48,
+      0x44,
+      0x52,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x08,
+      0x06,
+      0x00,
+      0x00,
+      0x00,
+      0x1F,
+      0x15,
+      0xC4,
+      0x49,
+      0x45,
+      0x4E,
+      0x44,
+      0xAE,
+      0x42,
+      0x60,
+      0x82,
+    ]);
+
+    test('GeminiVisionProvider rejects empty API key', () async {
+      final provider = GeminiVisionProvider(apiKey: '   ');
+      expect(
+        () =>
+            provider.analyze(imageBytes: validPngBytes, mimeType: 'image/png'),
+        throwsA(isA<VisionProviderException>()),
+      );
+    });
+
+    test(
+      'GeminiVisionProvider handles malformed JSON response from Gemini',
+      () async {
+        final mockClient = MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {'text': 'THIS IS NOT VALID JSON AT ALL {[[['},
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        });
+
+        final provider = GeminiVisionProvider(
+          apiKey: 'test-key',
+          httpClient: mockClient,
+        );
+
+        expect(
+          () => provider.analyze(
+            imageBytes: validPngBytes,
+            mimeType: 'image/png',
+          ),
+          throwsA(
+            isA<VisionProviderException>().having(
+              (e) => e.message,
+              'message',
+              contains('Failed to parse Gemini structured JSON'),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('GeminiVisionProvider handles empty candidates list (safety filter block)', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response(jsonEncode({'candidates': []}), 200);
+      });
+
+      final provider = GeminiVisionProvider(
+        apiKey: 'test-key',
+        httpClient: mockClient,
+      );
+
+      expect(
+        () =>
+            provider.analyze(imageBytes: validPngBytes, mimeType: 'image/png'),
+        throwsA(
+          isA<VisionProviderException>().having(
+            (e) => e.message,
+            'message',
+            contains('empty candidates list'),
+          ),
+        ),
+      );
+    });
+
+    test(
+      'GeminiVisionProvider handles upstream HTTP 500 error after retries',
+      () async {
+        final mockClient = MockClient((request) async {
+          return http.Response('Internal Server Error', 500);
+        });
+
+        final provider = GeminiVisionProvider(
+          apiKey: 'test-key',
+          httpClient: mockClient,
+        );
+
+        expect(
+          () => provider.analyze(
+            imageBytes: validPngBytes,
+            mimeType: 'image/png',
+          ),
+          throwsA(
+            isA<VisionProviderException>().having(
+              (e) => e.statusCode,
+              'statusCode',
+              500,
+            ),
+          ),
+        );
+      },
+    );
   });
 
   group('ZenithApiContract Client Adapter Tests', () {
@@ -198,4 +385,20 @@ void main() {
       expect(reconstituted.verificationStatus, rescanRes.verificationStatus);
     });
   });
+}
+
+class _FailingVisionProvider implements IVisionAnalysisProvider {
+  final Exception failure;
+
+  _FailingVisionProvider(this.failure);
+
+  @override
+  Future<VisionAnalysisRawResult> analyze({
+    required Uint8List imageBytes,
+    required String mimeType,
+    String? sensitivity,
+    String? model,
+  }) async {
+    throw failure;
+  }
 }

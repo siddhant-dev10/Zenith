@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,28 +18,115 @@ class CameraScreen extends ConsumerStatefulWidget {
   ConsumerState<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends ConsumerState<CameraScreen> {
+class _CameraScreenState extends ConsumerState<CameraScreen>
+    with WidgetsBindingObserver {
+  CameraController? _cameraController;
+  bool _isCameraInitialized = false;
+  bool _permissionDenied = false;
+  bool _isCapturing = false;
   bool _flashOn = false;
   bool _gridOn = true;
 
   @override
   void initState() {
     super.initState();
-    // Prompt camera pick if no image already loaded
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final state = ref.read(auditProvider);
-      if (!state.hasImageSelected) {
-        _capture();
+    WidgetsBinding.instance.addObserver(this);
+    _initCamera();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cameraController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final CameraController? cameraController = _cameraController;
+    if (cameraController == null || !cameraController.value.isInitialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive) {
+      cameraController.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initCamera();
+    }
+  }
+
+  Future<void> _initCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isCameraInitialized = false;
+          });
+        }
+        return;
       }
-    });
+
+      final controller = CameraController(
+        cameras.first,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      _cameraController = controller;
+      await controller.initialize();
+
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _permissionDenied = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = false;
+          if (e.toString().contains('permission') ||
+              e.toString().contains('denied') ||
+              e.toString().contains('CameraAccessDenied')) {
+            _permissionDenied = true;
+          }
+        });
+      }
+    }
   }
 
   Future<void> _capture() async {
-    await ref.read(auditProvider.notifier).pickFromCamera();
+    if (_isCapturing) return;
+
+    if (_cameraController != null &&
+        _cameraController!.value.isInitialized &&
+        !_cameraController!.value.isTakingPicture) {
+      try {
+        setState(() => _isCapturing = true);
+        final xFile = await _cameraController!.takePicture();
+        final bytes = await xFile.readAsBytes();
+        ref
+            .read(auditProvider.notifier)
+            .setImageBytes(bytes: bytes, path: xFile.path);
+      } catch (e) {
+        // Fallback to ImagePicker camera pick
+        await ref.read(auditProvider.notifier).pickFromCamera();
+      } finally {
+        if (mounted) setState(() => _isCapturing = false);
+      }
+    } else {
+      // Fallback for desktop / simulator / non-controller environments
+      await ref.read(auditProvider.notifier).pickFromCamera();
+    }
   }
 
   Future<void> _pickGallery() async {
     await ref.read(auditProvider.notifier).pickFromGallery();
+  }
+
+  void _retake() {
+    ref.read(auditProvider.notifier).clearSelection();
   }
 
   void _proceedToAnalysis() {
@@ -48,6 +136,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
   }
 
   Widget _buildPreview(AuditState state) {
+    // 1. Captured / Selected image preview
     if (state.selectedImageBytes != null) {
       return Image.memory(
         state.selectedImageBytes!,
@@ -66,47 +155,110 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
         fit: BoxFit.contain,
         width: double.infinity,
       );
-    } else {
-      return Center(
+    }
+
+    // 2. Live Hardware Camera Preview
+    if (_isCameraInitialized &&
+        _cameraController != null &&
+        _cameraController!.value.isInitialized) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: AspectRatio(
+          aspectRatio: _cameraController!.value.aspectRatio,
+          child: CameraPreview(_cameraController!),
+        ),
+      );
+    }
+
+    // 3. Permission Denied Fallback
+    if (_permissionDenied) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        color: Colors.black87,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.primaryCyan.withOpacity(0.3),
-                ),
-              ),
-              child: const Icon(
-                Icons.camera_alt_outlined,
-                size: 48,
-                color: AppColors.primaryCyan,
-              ),
+            const Icon(
+              Icons.no_photography_rounded,
+              size: 52,
+              color: AppColors.riskCritical,
             ),
             const SizedBox(height: 16),
             Text(
-              'Align Subject in Viewfinder',
+              'Camera Access Denied',
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 16,
+                fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              'Capture IDs, badges, screens, or documents',
+              'Camera permission is required to capture photos directly. You can enable it in system settings, or upload an existing photo from your gallery.',
+              textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 12,
                 color: AppColors.textMuted,
+                height: 1.5,
               ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _pickGallery,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryCyan,
+                foregroundColor: AppColors.darkBg,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+              ),
+              icon: const Icon(Icons.photo_library_rounded, size: 18),
+              label: const Text('Upload from Gallery'),
             ),
           ],
         ),
       );
     }
+
+    // 4. Standby Viewfinder for Desktop / Simulator / Standby
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.primaryCyan.withOpacity(0.3)),
+            ),
+            child: const Icon(
+              Icons.camera_alt_outlined,
+              size: 48,
+              color: AppColors.primaryCyan,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Align Subject in Viewfinder',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Capture IDs, badges, screens, or documents',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              color: AppColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -119,7 +271,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Viewfinder & Image Area
             Column(
               children: [
                 // Top Action Bar
@@ -138,7 +289,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                         onPressed: () => Navigator.pop(context),
                       ),
                       const Spacer(),
-                      // Flash Toggle
+                      // Flash Toggle (if camera active)
                       IconButton(
                         icon: Icon(
                           _flashOn
@@ -148,7 +299,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                               ? AppColors.primaryCyan
                               : Colors.white70,
                         ),
-                        onPressed: () => setState(() => _flashOn = !_flashOn),
+                        onPressed: () {
+                          setState(() => _flashOn = !_flashOn);
+                          if (_cameraController != null &&
+                              _cameraController!.value.isInitialized) {
+                            _cameraController!.setFlashMode(
+                              _flashOn ? FlashMode.torch : FlashMode.off,
+                            );
+                          }
+                        },
                       ),
                       // Grid Toggle
                       IconButton(
@@ -203,7 +362,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                           color: const Color(0xFF0F141C),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: AppColors.primaryCyan.withOpacity(0.4),
+                            color: hasImage
+                                ? AppColors.riskLow.withOpacity(0.8)
+                                : AppColors.primaryCyan.withOpacity(0.4),
                             width: 1.5,
                           ),
                         ),
@@ -246,11 +407,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                               child: Center(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
+                                    horizontal: 12,
+                                    vertical: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.7),
+                                    color: Colors.black.withOpacity(0.75),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
                                       color: hasImage
@@ -272,11 +433,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                                               : AppColors.primaryCyan,
                                         ),
                                       ),
-                                      const SizedBox(width: 6),
+                                      const SizedBox(width: 8),
                                       Text(
                                         hasImage
-                                            ? 'PAYLOAD READY • PREVIEW'
-                                            : 'AIM AT SUBJECT TO SCAN',
+                                            ? 'PHOTOGRAPH PREVIEW READY'
+                                            : (_isCameraInitialized
+                                                  ? 'LIVE CAMERA ACTIVE'
+                                                  : 'VIEWFINDER STANDBY'),
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 9,
                                           fontWeight: FontWeight.w700,
@@ -330,24 +493,31 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
         ),
         // Primary Capture Shutter
         GestureDetector(
-          onTap: _capture,
+          onTap: _isCapturing ? null : _capture,
           child: Container(
             width: 76,
             height: 76,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 4),
+              border: Border.all(
+                color: _isCapturing ? AppColors.primaryCyan : Colors.white,
+                width: 4,
+              ),
             ),
             padding: const EdgeInsets.all(6),
             child: Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [AppColors.primaryCyan, AppColors.accentIndigo],
+                  colors: _isCapturing
+                      ? [AppColors.riskModerate, AppColors.riskCritical]
+                      : [AppColors.primaryCyan, AppColors.accentIndigo],
                 ),
               ),
-              child: const Icon(
-                Icons.camera_alt_rounded,
+              child: Icon(
+                _isCapturing
+                    ? Icons.hourglass_top_rounded
+                    : Icons.camera_alt_rounded,
                 color: Colors.white,
                 size: 30,
               ),
@@ -381,10 +551,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
             // Retake Button
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () {
-                  ref.read(auditProvider.notifier).clearSelection();
-                  _capture();
-                },
+                onPressed: _retake,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   side: const BorderSide(color: AppColors.darkBorder),
@@ -402,8 +569,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            // Run Privacy Audit Button
+            const SizedBox(width: 8),
+            // Replace via Gallery
+            IconButton(
+              icon: const Icon(
+                Icons.photo_library_rounded,
+                color: Colors.white70,
+              ),
+              tooltip: 'Replace from Gallery',
+              onPressed: _pickGallery,
+            ),
+            const SizedBox(width: 8),
+            // Confirm & Analyze Button
             Expanded(
               flex: 2,
               child: ElevatedButton.icon(
@@ -419,10 +596,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
                 ),
                 icon: const Icon(Icons.security_rounded, size: 20),
                 label: Text(
-                  'ANALYZE PRIVACY',
+                  'CONFIRM & ANALYZE',
                   style: GoogleFonts.jetBrainsMono(
                     fontWeight: FontWeight.w800,
-                    fontSize: 13,
+                    fontSize: 12,
                     letterSpacing: 0.5,
                   ),
                 ),

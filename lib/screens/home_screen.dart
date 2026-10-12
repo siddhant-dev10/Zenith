@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../core/constants/app_constants.dart';
-import '../core/privacy_engine/testing/test_case_framework.dart';
+import '../core/privacy_engine/testing/test_case_models.dart';
 import '../core/theme/app_colors.dart';
 import '../models/privacy_audit_report.dart';
 import '../providers/audit_provider.dart';
@@ -825,17 +825,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-/// Cyber-styled modal displaying execution results of Zenith's 15-class benchmark evaluation suite.
-class BenchmarkSuiteModal extends StatefulWidget {
+/// Cyber-styled modal displaying execution results of Zenith's 20-category benchmark evaluation suite.
+class BenchmarkSuiteModal extends ConsumerStatefulWidget {
   const BenchmarkSuiteModal({super.key});
 
   @override
-  State<BenchmarkSuiteModal> createState() => _BenchmarkSuiteModalState();
+  ConsumerState<BenchmarkSuiteModal> createState() =>
+      _BenchmarkSuiteModalState();
 }
 
-class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
-  BenchmarkEvaluationSummary? _summary;
+class _BenchmarkSuiteModalState extends ConsumerState<BenchmarkSuiteModal> {
+  ZenithTestRunRecord? _runRecord;
+  Map<String, ZenithTestCaseRecord> _testCases = {};
   bool _isRunning = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -844,13 +847,28 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
   }
 
   Future<void> _runBenchmark() async {
-    setState(() => _isRunning = true);
-    final summary = await ZenithTestRunner.runBenchmarkSuite();
-    if (mounted) {
-      setState(() {
-        _summary = summary;
-        _isRunning = false;
-      });
+    setState(() {
+      _isRunning = true;
+      _errorMessage = null;
+    });
+    try {
+      final client = ref.read(auditProvider.notifier).apiClient;
+      final cases = await client.getTestCases();
+      final run = await client.executeTestRun();
+      if (mounted) {
+        setState(() {
+          _testCases = {for (final tc in cases) tc.id: tc};
+          _runRecord = run;
+          _isRunning = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isRunning = false;
+        });
+      }
     }
   }
 
@@ -927,7 +945,7 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                             ),
                           ),
                           Text(
-                            '15 Threat Classes • Deterministic Calibration',
+                            '20 Threat Categories • Calibration & Evaluation',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 12,
                               color: AppColors.textMuted,
@@ -965,7 +983,7 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'Running 15 Scenario Threat Evaluations...',
+                              'Evaluating 20 Threat Categories...',
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 13,
                                 color: AppColors.textMuted,
@@ -974,7 +992,47 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                           ],
                         ),
                       )
-                    : _summary == null
+                    : _errorMessage != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                color: AppColors.riskCritical,
+                                size: 40,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Benchmark Execution Failed',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.riskCritical,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 12,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: _runBenchmark,
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _runRecord == null
                     ? const SizedBox.shrink()
                     : ListView(
                         controller: scrollController,
@@ -984,29 +1042,62 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: AppColors.riskLow.withOpacity(0.1),
+                              color: AppColors.riskLow.withOpacity(0.08),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: AppColors.riskLow.withOpacity(0.3),
                               ),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            child: Column(
                               children: [
-                                _buildMetric(
-                                  'Pass Rate',
-                                  '${_summary!.passRate.toStringAsFixed(0)}%',
-                                  AppColors.riskLow,
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceAround,
+                                  children: [
+                                    _buildMetric(
+                                      'Pass Rate',
+                                      '${_runRecord!.passRate.toStringAsFixed(0)}%',
+                                      AppColors.riskLow,
+                                    ),
+                                    _buildMetric(
+                                      'Scenarios',
+                                      '${_runRecord!.passedCases}/${_runRecord!.totalCases}',
+                                      AppColors.primaryCyan,
+                                    ),
+                                    _buildMetric(
+                                      'F1 Score',
+                                      _runRecord!.f1Score.toStringAsFixed(2),
+                                      AppColors.accentIndigo,
+                                    ),
+                                  ],
                                 ),
-                                _buildMetric(
-                                  'Scenarios',
-                                  '${_summary!.passedTests}/${_summary!.totalTests}',
-                                  AppColors.primaryCyan,
-                                ),
-                                _buildMetric(
-                                  'Mean Delta',
-                                  '${_summary!.meanAbsoluteScoreDelta.toStringAsFixed(1)} pts',
-                                  AppColors.accentIndigo,
+                                const SizedBox(height: 12),
+                                const Divider(height: 1),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceAround,
+                                  children: [
+                                    _buildMetric(
+                                      'Precision',
+                                      _runRecord!.precision.toStringAsFixed(2),
+                                      isDark
+                                          ? AppColors.textLight
+                                          : AppColors.textDark,
+                                    ),
+                                    _buildMetric(
+                                      'Recall',
+                                      _runRecord!.recall.toStringAsFixed(2),
+                                      isDark
+                                          ? AppColors.textLight
+                                          : AppColors.textDark,
+                                    ),
+                                    _buildMetric(
+                                      'Severity Acc',
+                                      '${_runRecord!.severityAccuracy.toStringAsFixed(0)}%',
+                                      AppColors.primaryCyan,
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -1015,7 +1106,7 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                           const SizedBox(height: 20),
 
                           Text(
-                            'SCENARIO EVALUATIONS (${_summary!.results.length})',
+                            'SCENARIO EVALUATIONS (${_runRecord!.results.length})',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
@@ -1026,8 +1117,8 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
 
                           const SizedBox(height: 10),
 
-                          ..._summary!.results.map((res) {
-                            final tc = res.testCase;
+                          ..._runRecord!.results.map((res) {
+                            final tc = _testCases[res.testCaseId];
                             final passColor = res.passed
                                 ? AppColors.riskLow
                                 : AppColors.riskCritical;
@@ -1062,7 +1153,7 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                                           ),
                                         ),
                                         child: Text(
-                                          tc.testId,
+                                          res.testCaseId,
                                           style: GoogleFonts.jetBrainsMono(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w700,
@@ -1073,7 +1164,7 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          tc.scenarioClass,
+                                          tc?.category ?? 'THREAT CLASS',
                                           style: GoogleFonts.plusJakartaSans(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w700,
@@ -1108,7 +1199,7 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    tc.title,
+                                    res.testCaseName,
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
@@ -1119,7 +1210,7 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Score: ${res.report.overallScore}/100 (${res.report.riskLevel.label}) • Expected: [${tc.minExpectedScore} - ${tc.maxExpectedScore}]',
+                                    'Score: ${res.actualScore}/100 (${res.actualSeverity.toUpperCase()}) • Expected: [${res.expectedMinScore} - ${res.expectedMaxScore}] (${res.expectedSeverity.toUpperCase()})',
                                     style: GoogleFonts.jetBrainsMono(
                                       fontSize: 11,
                                       color: AppColors.textMuted,
@@ -1127,15 +1218,38 @@ class _BenchmarkSuiteModalState extends State<BenchmarkSuiteModal> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    tc.acceptanceCriteria,
-                                    style: GoogleFonts.plusJakartaSans(
+                                    'Detections: ${res.actualDetectionsCount}/${res.expectedDetectionsCount} • Latency: ${res.durationMs}ms',
+                                    style: GoogleFonts.jetBrainsMono(
                                       fontSize: 11,
-                                      fontStyle: FontStyle.italic,
-                                      color: AppColors.textMuted.withOpacity(
-                                        0.8,
+                                      color: AppColors.primaryCyan.withOpacity(
+                                        0.9,
                                       ),
                                     ),
                                   ),
+                                  if (res.differences.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Differences: ${res.differences.join(", ")}',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        color: AppColors.riskCritical,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                  if (tc?.description != null) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      tc!.description,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontStyle: FontStyle.italic,
+                                        color: AppColors.textMuted.withOpacity(
+                                          0.8,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             );

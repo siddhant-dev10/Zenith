@@ -48,4 +48,16 @@ class SettingsNotifier extends Notifier<UserSettings> {
     state = updated;
     await StorageService.saveSettings(updated);
   }
+
+  Future<void> updateBackendUrl(String url) async {
+    final updated = state.copyWith(backendUrl: url);
+    state = updated;
+    await StorageService.saveSettings(updated);
+  }
+
+  Future<void> toggleRemoteBackend(bool useRemote) async {
+    final updated = state.copyWith(useRemoteBackend: useRemote);
+    state = updated;
+    await StorageService.saveSettings(updated);
+  }
 }

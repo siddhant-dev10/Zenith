@@ -5,17 +5,42 @@ import 'dart:typed_data';
 import 'package:zenith/core/privacy_engine/api/zenith_api_contract.dart';
 import 'package:zenith/core/privacy_engine/pipeline/zenith_analysis_pipeline.dart';
 import 'package:zenith/core/privacy_engine/providers/vision_analysis_provider.dart';
+import 'package:zenith/core/privacy_engine/testing/test_case_models.dart';
+import 'package:zenith/core/privacy_engine/testing/test_case_repository.dart';
+import 'package:zenith/core/privacy_engine/testing/test_evaluator.dart';
 import 'package:zenith/core/privacy_engine/validation/image_validator.dart';
+
+// In-memory cache for generated analyses (supports GET /v1/analyses/:id)
+final Map<String, AnalyzeImageResponse> _recentAnalyses = {};
 
 Future<HttpServer> startZenithServer({
   required int port,
   required ZenithAnalysisPipeline pipeline,
+  ZenithTestCaseRepository? testCaseRepo,
+  ZenithTestRunRepository? testRunRepo,
   InternetAddress? address,
 }) async {
+  final tcRepo = testCaseRepo ?? ZenithTestCaseRepository();
+  final trRepo = testRunRepo ?? ZenithTestRunRepository();
+  final seeder = ZenithTestCaseSeeder(tcRepo);
+  await seeder.seedInitialCases();
+
+  final evaluator = ZenithTestEvaluator(
+    testCaseRepo: tcRepo,
+    testRunRepo: trRepo,
+    pipeline: pipeline,
+  );
+
   final bindAddress = address ?? InternetAddress.anyIPv4;
   final server = await HttpServer.bind(bindAddress, port);
   server.listen((HttpRequest request) {
-    handleRequest(request, pipeline);
+    handleRequest(
+      request,
+      pipeline,
+      tcRepo: tcRepo,
+      trRepo: trRepo,
+      evaluator: evaluator,
+    );
   });
   return server;
 }
@@ -59,23 +84,42 @@ void main(List<String> args) async {
   );
   stdout.writeln('  Health check: http://localhost:${server.port}/health');
   stdout.writeln(
-    '  Analyze API:  POST http://localhost:${server.port}/v1/analyze',
+    '  Analyze API:  POST http://localhost:${server.port}/api/v1/analyze',
   );
   stdout.writeln(
-    '  Rescan API:   POST http://localhost:${server.port}/v1/rescan',
+    '  Test Cases:   GET  http://localhost:${server.port}/api/v1/test-cases',
+  );
+  stdout.writeln(
+    '  Test Runs:    POST http://localhost:${server.port}/api/v1/test-runs',
   );
   stdout.writeln('====================================================');
 }
 
 Future<void> handleRequest(
   HttpRequest request,
-  ZenithAnalysisPipeline pipeline,
-) async {
+  ZenithAnalysisPipeline pipeline, {
+  ZenithTestCaseRepository? tcRepo,
+  ZenithTestRunRepository? trRepo,
+  ZenithTestEvaluator? evaluator,
+}) async {
+  final testCaseRepo = tcRepo ?? ZenithTestCaseRepository();
+  final testRunRepo = trRepo ?? ZenithTestRunRepository();
+  final testEvaluator =
+      evaluator ??
+      ZenithTestEvaluator(
+        testCaseRepo: testCaseRepo,
+        testRunRepo: testRunRepo,
+        pipeline: pipeline,
+      );
+
   final res = request.response;
 
   // Add standard CORS headers
   res.headers.set('Access-Control-Allow-Origin', '*');
-  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.headers.set(
+    'Access-Control-Allow-Methods',
+    'GET, POST, PATCH, DELETE, OPTIONS',
+  );
   res.headers.set(
     'Access-Control-Allow-Headers',
     'Content-Type, Authorization, X-Client-Request-Id',
@@ -90,7 +134,9 @@ Future<void> handleRequest(
   final path = request.uri.path;
 
   try {
-    if (request.method == 'GET' && (path == '/' || path == '/health')) {
+    // 1. Health check
+    if (request.method == 'GET' &&
+        (path == '/' || path == '/health' || path == '/api/v1/health')) {
       res.statusCode = HttpStatus.ok;
       res.headers.contentType = ContentType.json;
       res.write(
@@ -105,7 +151,9 @@ Future<void> handleRequest(
       return;
     }
 
-    if (request.method == 'POST' && path == '/v1/analyze') {
+    // 2. Ingest and Analyze Image (POST /v1/analyze or /api/v1/analyze)
+    if (request.method == 'POST' &&
+        (path == '/v1/analyze' || path == '/api/v1/analyze')) {
       final bodyStr = await utf8.decodeStream(request);
       final Map<String, dynamic> body;
       try {
@@ -137,7 +185,6 @@ Future<void> handleRequest(
 
       final Uint8List imageBytes;
       try {
-        // Strip data URI scheme prefix if present
         final cleanBase64 = imageRaw.contains(',')
             ? imageRaw.split(',').last
             : imageRaw;
@@ -164,6 +211,8 @@ Future<void> handleRequest(
         );
 
         final apiResponse = AnalyzeImageResponse.fromReport(report);
+        _recentAnalyses[apiResponse.analysisId] = apiResponse;
+
         res.statusCode = HttpStatus.ok;
         res.headers.contentType = ContentType.json;
         res.write(jsonEncode(apiResponse.toJson()));
@@ -209,7 +258,34 @@ Future<void> handleRequest(
       return;
     }
 
-    if (request.method == 'POST' && path == '/v1/rescan') {
+    // 3. Retrieve Historical Analysis by ID (GET /api/v1/analyses/:id or /v1/analyses/:id)
+    if (request.method == 'GET' &&
+        (path.startsWith('/v1/analyses/') ||
+            path.startsWith('/api/v1/analyses/'))) {
+      final id = path.split('/').last;
+      final cached = _recentAnalyses[id];
+      if (cached != null) {
+        res.statusCode = HttpStatus.ok;
+        res.headers.contentType = ContentType.json;
+        res.write(jsonEncode(cached.toJson()));
+        await res.close();
+        return;
+      } else {
+        _sendError(
+          res,
+          HttpStatus.notFound,
+          type: 'https://zenith.privacy/errors/analysis-not-found',
+          title: 'Analysis Not Found',
+          detail: 'No analysis report found for ID "$id".',
+          instance: path,
+        );
+        return;
+      }
+    }
+
+    // 4. Verify Rescan (POST /v1/rescan or /api/v1/rescan)
+    if (request.method == 'POST' &&
+        (path == '/v1/rescan' || path == '/api/v1/rescan')) {
       final bodyStr = await utf8.decodeStream(request);
       final Map<String, dynamic> body;
       try {
@@ -308,6 +384,153 @@ Future<void> handleRequest(
         );
       }
       return;
+    }
+
+    // 5. Test-Case Library Endpoints (GET, POST /api/v1/test-cases)
+    if (path == '/api/v1/test-cases' || path == '/v1/test-cases') {
+      if (request.method == 'GET') {
+        final all = await testCaseRepo.getAll();
+        res.statusCode = HttpStatus.ok;
+        res.headers.contentType = ContentType.json;
+        res.write(jsonEncode(all.map((e) => e.toJson()).toList()));
+        await res.close();
+        return;
+      } else if (request.method == 'POST') {
+        final bodyStr = await utf8.decodeStream(request);
+        final json = jsonDecode(bodyStr) as Map<String, dynamic>;
+        final record = ZenithTestCaseRecord.fromJson(json);
+        final saved = await testCaseRepo.save(record);
+        res.statusCode = HttpStatus.created;
+        res.headers.contentType = ContentType.json;
+        res.write(jsonEncode(saved.toJson()));
+        await res.close();
+        return;
+      }
+    }
+
+    // 6. Test-Case Individual Endpoint (GET, PATCH, DELETE /api/v1/test-cases/:id)
+    if (path.startsWith('/api/v1/test-cases/') ||
+        path.startsWith('/v1/test-cases/')) {
+      final id = path.split('/').last;
+      if (request.method == 'GET') {
+        final record = await testCaseRepo.getById(id);
+        if (record != null) {
+          res.statusCode = HttpStatus.ok;
+          res.headers.contentType = ContentType.json;
+          res.write(jsonEncode(record.toJson()));
+          await res.close();
+          return;
+        } else {
+          _sendError(
+            res,
+            HttpStatus.notFound,
+            type: 'https://zenith.privacy/errors/test-case-not-found',
+            title: 'Test Case Not Found',
+            detail: 'Test case with ID "$id" does not exist.',
+            instance: path,
+          );
+          return;
+        }
+      } else if (request.method == 'PATCH') {
+        final bodyStr = await utf8.decodeStream(request);
+        final updates = jsonDecode(bodyStr) as Map<String, dynamic>;
+        final updated = await testCaseRepo.patch(id, updates);
+        if (updated != null) {
+          res.statusCode = HttpStatus.ok;
+          res.headers.contentType = ContentType.json;
+          res.write(jsonEncode(updated.toJson()));
+          await res.close();
+          return;
+        } else {
+          _sendError(
+            res,
+            HttpStatus.notFound,
+            type: 'https://zenith.privacy/errors/test-case-not-found',
+            title: 'Test Case Not Found',
+            detail: 'Cannot patch non-existent test case "$id".',
+            instance: path,
+          );
+          return;
+        }
+      } else if (request.method == 'DELETE') {
+        final deleted = await testCaseRepo.delete(id);
+        if (deleted) {
+          res.statusCode = HttpStatus.noContent;
+          await res.close();
+          return;
+        } else {
+          _sendError(
+            res,
+            HttpStatus.notFound,
+            type: 'https://zenith.privacy/errors/test-case-not-found',
+            title: 'Test Case Not Found',
+            detail: 'Cannot delete non-existent test case "$id".',
+            instance: path,
+          );
+          return;
+        }
+      }
+    }
+
+    // 7. Test-Run Execution and History (POST, GET /api/v1/test-runs)
+    if (path == '/api/v1/test-runs' || path == '/v1/test-runs') {
+      if (request.method == 'GET') {
+        final runs = await testRunRepo.getAllRuns();
+        res.statusCode = HttpStatus.ok;
+        res.headers.contentType = ContentType.json;
+        res.write(jsonEncode(runs.map((r) => r.toJson()).toList()));
+        await res.close();
+        return;
+      } else if (request.method == 'POST') {
+        List<String>? selectedCaseIds;
+        final bodyStr = await utf8.decodeStream(request);
+        if (bodyStr.trim().isNotEmpty) {
+          try {
+            final json = jsonDecode(bodyStr) as Map<String, dynamic>;
+            if (json['caseIds'] is List) {
+              selectedCaseIds = (json['caseIds'] as List)
+                  .map((e) => e.toString())
+                  .toList();
+            }
+          } catch (_) {}
+        }
+
+        final runRecord = await testEvaluator.executeSuite(
+          selectedCaseIds: selectedCaseIds,
+        );
+
+        res.statusCode = HttpStatus.ok;
+        res.headers.contentType = ContentType.json;
+        res.write(jsonEncode(runRecord.toJson()));
+        await res.close();
+        return;
+      }
+    }
+
+    // 8. Individual Test-Run Retrieval (GET /api/v1/test-runs/:id)
+    if (path.startsWith('/api/v1/test-runs/') ||
+        path.startsWith('/v1/test-runs/')) {
+      final runId = path.split('/').last;
+      if (request.method == 'GET') {
+        final run = await testRunRepo.getRunById(runId);
+        if (run != null) {
+          res.statusCode = HttpStatus.ok;
+          res.headers.contentType = ContentType.json;
+          res.write(jsonEncode(run.toJson()));
+          await res.close();
+          return;
+        } else {
+          _sendError(
+            res,
+            HttpStatus.notFound,
+            type: 'https://zenith.privacy/errors/test-run-not-found',
+            title: 'Test Run Not Found',
+            detail: 'Test run with ID "$runId" does not exist.',
+            instance: path,
+          );
+          return;
+        }
+      }
     }
 
     // 404 Route Not Found

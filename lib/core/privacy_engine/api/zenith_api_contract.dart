@@ -6,6 +6,9 @@ import 'package:http/http.dart' as http;
 import '../../../models/privacy_audit_report.dart';
 import '../pipeline/zenith_analysis_pipeline.dart';
 import '../providers/vision_analysis_provider.dart';
+import '../testing/test_case_models.dart';
+import '../testing/test_case_repository.dart';
+import '../testing/test_evaluator.dart';
 
 /// Request DTO submitted by the external Camera Application to Zenith.
 class AnalyzeImageRequest {
@@ -257,17 +260,31 @@ abstract class IZenithClient {
   Future<RescanVerificationResponse> verifyRescan(
     RescanVerificationRequest request,
   );
+
+  // Test-case library & evaluation framework endpoints
+  Future<List<ZenithTestCaseRecord>> getTestCases();
+  Future<ZenithTestCaseRecord?> getTestCase(String id);
+  Future<ZenithTestRunRecord> executeTestRun({List<String>? caseIds});
+  Future<List<ZenithTestRunRecord>> getTestRuns();
+  Future<ZenithTestRunRecord?> getTestRun(String runId);
 }
 
 /// Local implementation of the Zenith API client, allowing the camera app
 /// to run in-process or mock mode without requiring a remote HTTP server.
 class ZenithLocalClient implements IZenithClient {
   final ZenithAnalysisPipeline _pipeline;
+  final ZenithTestCaseRepository _testCaseRepo;
+  final ZenithTestRunRepository _testRunRepo;
 
-  ZenithLocalClient({ZenithAnalysisPipeline? pipeline})
-    : _pipeline =
-          pipeline ??
-          ZenithAnalysisPipeline(visionProvider: MockVisionProvider());
+  ZenithLocalClient({
+    ZenithAnalysisPipeline? pipeline,
+    ZenithTestCaseRepository? testCaseRepo,
+    ZenithTestRunRepository? testRunRepo,
+  }) : _pipeline =
+           pipeline ??
+           ZenithAnalysisPipeline(visionProvider: MockVisionProvider()),
+       _testCaseRepo = testCaseRepo ?? ZenithTestCaseRepository(),
+       _testRunRepo = testRunRepo ?? ZenithTestRunRepository();
 
   @override
   Future<AnalyzeImageResponse> analyzeImage(AnalyzeImageRequest request) async {
@@ -306,6 +323,36 @@ class ZenithLocalClient implements IZenithClient {
           ? 'All critical privacy exposures successfully redacted. Safe for publication.'
           : 'Residual exposure detected. Consider additional blurring.',
     );
+  }
+
+  @override
+  Future<List<ZenithTestCaseRecord>> getTestCases() async {
+    return _testCaseRepo.getAll();
+  }
+
+  @override
+  Future<ZenithTestCaseRecord?> getTestCase(String id) async {
+    return _testCaseRepo.getById(id);
+  }
+
+  @override
+  Future<ZenithTestRunRecord> executeTestRun({List<String>? caseIds}) async {
+    final evaluator = ZenithTestEvaluator(
+      testCaseRepo: _testCaseRepo,
+      testRunRepo: _testRunRepo,
+      pipeline: _pipeline,
+    );
+    return evaluator.executeSuite(selectedCaseIds: caseIds);
+  }
+
+  @override
+  Future<List<ZenithTestRunRecord>> getTestRuns() async {
+    return _testRunRepo.getAllRuns();
+  }
+
+  @override
+  Future<ZenithTestRunRecord?> getTestRun(String runId) async {
+    return _testRunRepo.getRunById(runId);
   }
 }
 
@@ -369,5 +416,84 @@ class ZenithHttpClient implements IZenithClient {
         'Zenith Rescan API Error (${response.statusCode}): ${response.body}',
       );
     }
+  }
+
+  @override
+  Future<List<ZenithTestCaseRecord>> getTestCases() async {
+    final uri = Uri.parse('$baseUrl/api/v1/test-cases');
+    final response = await _client.get(uri);
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List;
+      return list
+          .map(
+            (e) => ZenithTestCaseRecord.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
+          .toList();
+    }
+    throw Exception('Failed to load test cases: ${response.statusCode}');
+  }
+
+  @override
+  Future<ZenithTestCaseRecord?> getTestCase(String id) async {
+    final uri = Uri.parse('$baseUrl/api/v1/test-cases/$id');
+    final response = await _client.get(uri);
+    if (response.statusCode == 200) {
+      return ZenithTestCaseRecord.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    } else if (response.statusCode == 404) {
+      return null;
+    }
+    throw Exception('Failed to load test case $id: ${response.statusCode}');
+  }
+
+  @override
+  Future<ZenithTestRunRecord> executeTestRun({List<String>? caseIds}) async {
+    final uri = Uri.parse('$baseUrl/api/v1/test-runs');
+    final payload = caseIds != null ? {'caseIds': caseIds} : {};
+    final response = await _client.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return ZenithTestRunRecord.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    }
+    throw Exception('Failed to execute test run: ${response.statusCode}');
+  }
+
+  @override
+  Future<List<ZenithTestRunRecord>> getTestRuns() async {
+    final uri = Uri.parse('$baseUrl/api/v1/test-runs');
+    final response = await _client.get(uri);
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List;
+      return list
+          .map(
+            (e) => ZenithTestRunRecord.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
+          .toList();
+    }
+    throw Exception('Failed to load test runs: ${response.statusCode}');
+  }
+
+  @override
+  Future<ZenithTestRunRecord?> getTestRun(String runId) async {
+    final uri = Uri.parse('$baseUrl/api/v1/test-runs/$runId');
+    final response = await _client.get(uri);
+    if (response.statusCode == 200) {
+      return ZenithTestRunRecord.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    } else if (response.statusCode == 404) {
+      return null;
+    }
+    throw Exception('Failed to load test run $runId: ${response.statusCode}');
   }
 }

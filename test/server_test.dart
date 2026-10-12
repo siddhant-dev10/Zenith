@@ -230,5 +230,104 @@ void main() {
         expect(rescanRes.verificationStatus, isNotEmpty);
       },
     );
+
+    test('Real disk image asset (sample_student_id.png) can be submitted and produces structured privacy report', () async {
+      final sampleFile = File('assets/samples/sample_student_id.png');
+      expect(
+        sampleFile.existsSync(),
+        true,
+        reason: 'Real sample asset must exist on disk',
+      );
+      final realImageBytes = await sampleFile.readAsBytes();
+      expect(realImageBytes.length, greaterThan(1000));
+
+      final req = AnalyzeImageRequest(
+        imageBytes: realImageBytes,
+        clientRequestId: 'req_real_asset_student_id',
+        sensitivityProfile: 'high',
+      );
+
+      final response = await apiClient.analyzeImage(req);
+
+      expect(response.analysisId, isNotEmpty);
+      expect(response.overallScore, inInclusiveRange(0, 100));
+      expect(response.severityLevel, isNotEmpty);
+      expect(response.categoryScores, isNotEmpty);
+      expect(response.findings, isNotEmpty);
+      expect(response.recommendations, isNotEmpty);
+      expect(
+        response.processingStatus,
+        anyOf(equals('completed'), equals('partial_failure')),
+      );
+
+      // Verify GET /api/v1/analyses/:id retrieves this analysis
+      final getAnalysisRes = await http.get(
+        Uri.parse('$baseUrl/api/v1/analyses/${response.analysisId}'),
+      );
+      expect(getAnalysisRes.statusCode, HttpStatus.ok);
+      final fetched = jsonDecode(getAnalysisRes.body) as Map<String, dynamic>;
+      expect(fetched['analysisId'], response.analysisId);
+    });
+
+    test('GET /api/v1/test-cases returns all 20 seeded threat benchmark test cases', () async {
+      final res = await http.get(Uri.parse('$baseUrl/api/v1/test-cases'));
+      expect(res.statusCode, HttpStatus.ok);
+      final list = jsonDecode(res.body) as List;
+      expect(list.length, greaterThanOrEqualTo(20));
+
+      final ids = list.map((e) => (e as Map)['id']).toSet();
+      expect(ids.contains('TC-01-CLEAN'), true);
+      expect(ids.contains('TC-03-STUDENT-ID'), true);
+      expect(ids.contains('TC-10-TERMINAL-SCREEN'), true);
+      expect(ids.contains('TC-20-DEGRADED-DETECTOR'), true);
+    });
+
+    test(
+      'GET /api/v1/test-cases/:id returns specific test case details',
+      () async {
+        final res = await http.get(
+          Uri.parse('$baseUrl/api/v1/test-cases/TC-03-STUDENT-ID'),
+        );
+        expect(res.statusCode, HttpStatus.ok);
+        final tc = jsonDecode(res.body) as Map<String, dynamic>;
+        expect(tc['id'], 'TC-03-STUDENT-ID');
+        expect(tc['category'], 'student_ids');
+        expect(tc['expectedSeverity'], 'high');
+        expect(tc['minExpectedScore'], 51);
+      },
+    );
+
+    test('POST /api/v1/test-runs executes suite, computes evaluation metrics and persists run', () async {
+      // Execute a targeted test run with clean landscape, student ID, and terminal screen
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/v1/test-runs'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'caseIds': [
+            'TC-01-CLEAN',
+            'TC-03-STUDENT-ID',
+            'TC-10-TERMINAL-SCREEN',
+          ],
+        }),
+      );
+
+      expect(res.statusCode, HttpStatus.ok);
+      final run = jsonDecode(res.body) as Map<String, dynamic>;
+      expect(run['runId'], isNotEmpty);
+      expect(run['totalCases'], 3);
+      expect(run['passedCases'], 3);
+      expect(run['passRate'], 100.0);
+      expect(run['precision'], greaterThan(0.0));
+      expect(run['recall'], greaterThan(0.0));
+      expect(run['f1Score'], greaterThan(0.0));
+      expect(run['severityAccuracy'], 100.0);
+      expect((run['results'] as List).length, 3);
+
+      // Verify GET /api/v1/test-runs lists this run
+      final listRes = await http.get(Uri.parse('$baseUrl/api/v1/test-runs'));
+      expect(listRes.statusCode, HttpStatus.ok);
+      final allRuns = jsonDecode(listRes.body) as List;
+      expect(allRuns.any((r) => (r as Map)['runId'] == run['runId']), true);
+    });
   });
 }

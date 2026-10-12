@@ -1,20 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../core/privacy_engine/api/zenith_api_contract.dart';
+import '../core/privacy_engine/pipeline/zenith_analysis_pipeline.dart';
+import '../core/privacy_engine/providers/vision_analysis_provider.dart';
+import '../core/privacy_engine/validation/image_validator.dart';
+import '../models/detected_element.dart';
+import '../models/exposure_category.dart';
+import '../models/inferred_insight.dart';
 import '../models/privacy_audit_report.dart';
-import '../services/gemini_vision_service.dart';
-import '../services/mock_analysis_service.dart';
+import '../models/recommendation.dart';
+import '../models/risk_level.dart';
 import '../services/sample_data_service.dart';
 import '../services/storage_service.dart';
 import 'settings_provider.dart';
 
 enum ScanStatus {
   idle,
-  ingesting,
-  multimodalVision,
-  threatModeling,
-  synthesizing,
+  validating,
+  inspecting,
+  analyzingSensitiveInfo,
+  calculatingRisk,
+  preparingRecommendations,
   completed,
   error;
 
@@ -22,14 +32,16 @@ enum ScanStatus {
     switch (this) {
       case ScanStatus.idle:
         return 'Ready to scan';
-      case ScanStatus.ingesting:
-        return 'Stage 1/4: Ingesting optical payload & parsing EXIF metadata...';
-      case ScanStatus.multimodalVision:
-        return 'Stage 2/4: Executing Multimodal Neural Vision inspection...';
-      case ScanStatus.threatModeling:
-        return 'Stage 3/4: Modeling OPSEC risk matrix & attacker inferences...';
-      case ScanStatus.synthesizing:
-        return 'Stage 4/4: Synthesizing security audit & mitigations...';
+      case ScanStatus.validating:
+        return 'Stage 1/5: Validating image format & magic bytes...';
+      case ScanStatus.inspecting:
+        return 'Stage 2/5: Inspecting optical payload & metadata...';
+      case ScanStatus.analyzingSensitiveInfo:
+        return 'Stage 3/5: Analyzing sensitive information & credentials...';
+      case ScanStatus.calculatingRisk:
+        return 'Stage 4/5: Deterministically calculating privacy risk score...';
+      case ScanStatus.preparingRecommendations:
+        return 'Stage 5/5: Preparing actionable mitigation checklist...';
       case ScanStatus.completed:
         return 'Security assessment finalized';
       case ScanStatus.error:
@@ -41,13 +53,15 @@ enum ScanStatus {
     switch (this) {
       case ScanStatus.idle:
         return 0.0;
-      case ScanStatus.ingesting:
-        return 0.25;
-      case ScanStatus.multimodalVision:
-        return 0.55;
-      case ScanStatus.threatModeling:
-        return 0.80;
-      case ScanStatus.synthesizing:
+      case ScanStatus.validating:
+        return 0.20;
+      case ScanStatus.inspecting:
+        return 0.40;
+      case ScanStatus.analyzingSensitiveInfo:
+        return 0.65;
+      case ScanStatus.calculatingRisk:
+        return 0.85;
+      case ScanStatus.preparingRecommendations:
         return 0.95;
       case ScanStatus.completed:
         return 1.0;
@@ -79,10 +93,11 @@ class AuditState {
   });
 
   bool get isScanning =>
-      status == ScanStatus.ingesting ||
-      status == ScanStatus.multimodalVision ||
-      status == ScanStatus.threatModeling ||
-      status == ScanStatus.synthesizing;
+      status == ScanStatus.validating ||
+      status == ScanStatus.inspecting ||
+      status == ScanStatus.analyzingSensitiveInfo ||
+      status == ScanStatus.calculatingRisk ||
+      status == ScanStatus.preparingRecommendations;
 
   bool get hasImageSelected =>
       selectedImageBytes != null ||
@@ -132,6 +147,14 @@ class AuditNotifier extends Notifier<AuditState> {
     return const AuditState();
   }
 
+  IZenithClient get apiClient {
+    final settings = ref.read(settingsProvider);
+    if (settings.useRemoteBackend) {
+      return ZenithHttpClient(baseUrl: settings.backendUrl);
+    }
+    return ZenithLocalClient();
+  }
+
   Future<void> loadHistory() async {
     final list = await StorageService.loadHistory();
     final stats = await StorageService.getAuditStats();
@@ -159,12 +182,22 @@ class AuditNotifier extends Notifier<AuditState> {
     try {
       final photo = await _picker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 90,
-        maxWidth: 1920,
-        maxHeight: 1920,
+        imageQuality: 92,
+        maxWidth: 2048,
+        maxHeight: 2048,
       );
       if (photo != null) {
         final bytes = await photo.readAsBytes();
+        final validation = ImageValidator.validate(bytes);
+        if (!validation.isValid) {
+          state = state.copyWith(
+            status: ScanStatus.error,
+            errorMessage:
+                'Captured image validation failed: ${validation.errorMessage ?? "Invalid image"}. Please retake.',
+          );
+          return;
+        }
+
         state = state.copyWith(
           selectedImagePath: photo.path,
           selectedImageBytes: bytes,
@@ -175,8 +208,9 @@ class AuditNotifier extends Notifier<AuditState> {
       }
     } catch (e) {
       state = state.copyWith(
+        status: ScanStatus.error,
         errorMessage:
-            'Camera error: $e. You can also pick from gallery or test samples.',
+            'Camera access error: $e. You can also pick an image from gallery.',
       );
     }
   }
@@ -185,12 +219,22 @@ class AuditNotifier extends Notifier<AuditState> {
     try {
       final photo = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 90,
-        maxWidth: 1920,
-        maxHeight: 1920,
+        imageQuality: 95,
+        maxWidth: 2560,
+        maxHeight: 2560,
       );
       if (photo != null) {
         final bytes = await photo.readAsBytes();
+        final validation = ImageValidator.validate(bytes);
+        if (!validation.isValid) {
+          state = state.copyWith(
+            status: ScanStatus.error,
+            errorMessage:
+                'Invalid file format or corrupted image: ${validation.errorMessage ?? "Invalid image"}. Only JPEG, PNG, WebP, and HEIC up to 25MB are supported.',
+          );
+          return;
+        }
+
         state = state.copyWith(
           selectedImagePath: photo.path,
           selectedImageBytes: bytes,
@@ -200,7 +244,10 @@ class AuditNotifier extends Notifier<AuditState> {
         );
       }
     } catch (e) {
-      state = state.copyWith(errorMessage: 'Gallery picker error: $e.');
+      state = state.copyWith(
+        status: ScanStatus.error,
+        errorMessage: 'Gallery picker error: $e.',
+      );
     }
   }
 
@@ -209,6 +256,16 @@ class AuditNotifier extends Notifier<AuditState> {
     String? path,
     String? sampleAsset,
   }) {
+    final validation = ImageValidator.validate(bytes);
+    if (!validation.isValid) {
+      state = state.copyWith(
+        status: ScanStatus.error,
+        errorMessage:
+            'Image validation failed: ${validation.errorMessage ?? "Invalid image"}.',
+      );
+      return;
+    }
+
     state = state.copyWith(
       selectedImageBytes: bytes,
       selectedImagePath: path,
@@ -231,65 +288,118 @@ class AuditNotifier extends Notifier<AuditState> {
     if (bytes == null && state.selectedSampleAsset == null) {
       state = state.copyWith(
         status: ScanStatus.error,
-        errorMessage: 'Please capture or select an image first.',
+        errorMessage: 'Please capture or select a photograph first.',
       );
       return null;
     }
 
+    final effectiveBytes =
+        bytes ??
+        (await rootBundle.load(state.selectedSampleAsset!)).buffer
+            .asUint8List();
+
     final settings = ref.read(settingsProvider);
 
     try {
-      // Stage 1: Optical payload ingestion
-      state = state.copyWith(status: ScanStatus.ingesting, errorMessage: null);
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Stage 1: Validating image
+      state = state.copyWith(status: ScanStatus.validating, errorMessage: null);
+      final validation = ImageValidator.validate(effectiveBytes);
+      if (!validation.isValid) {
+        state = state.copyWith(
+          status: ScanStatus.error,
+          errorMessage:
+              'Image validation failed: ${validation.errorMessage ?? "Invalid image"}. Please upload a valid photograph.',
+        );
+        return null;
+      }
+      await Future.delayed(const Duration(milliseconds: 250));
 
-      // Stage 2: Multimodal Neural Vision inspection
-      state = state.copyWith(status: ScanStatus.multimodalVision);
+      // Stage 2: Inspecting optical payload & metadata
+      state = state.copyWith(status: ScanStatus.inspecting);
+      await Future.delayed(const Duration(milliseconds: 250));
 
       PrivacyAuditReport report;
 
-      // Check if user has an active Gemini API key configured
-      if (settings.hasApiKey && bytes != null) {
-        try {
-          report = await GeminiVisionService.analyzeImage(
-            imageBytes: bytes,
-            apiKey: settings.apiKey,
-            model: settings.model,
-            imagePath: state.selectedImagePath,
-            sensitivity: settings.sensitivity,
-          );
-        } catch (apiErr) {
-          // If live AI fails and mock fallback is enabled, gracefully fall back with warning
-          if (settings.useMockFallback) {
-            report = await MockAnalysisService.analyzeImage(
-              imageBytes: bytes,
-              imagePath: state.selectedImagePath,
-              sampleAsset: state.selectedSampleAsset,
+      // Determine backend routing: Remote REST Backend vs Local Intelligence Pipeline
+      if (settings.useRemoteBackend) {
+        final client = ZenithHttpClient(baseUrl: settings.backendUrl);
+        final response = await client
+            .analyzeImage(
+              AnalyzeImageRequest(
+                imageBytes: effectiveBytes,
+                sensitivityProfile: settings.sensitivity.toLowerCase(),
+              ),
+            )
+            .timeout(
+              const Duration(seconds: 30),
+              onTimeout: () => throw TimeoutException(
+                'Zenith backend at ${settings.backendUrl} timed out after 30 seconds.',
+              ),
             );
-          } else {
-            rethrow;
-          }
-        }
+
+        // Convert response into local PrivacyAuditReport model
+        report = PrivacyAuditReport(
+          id: response.analysisId,
+          timestamp: DateTime.now(),
+          imagePath: state.selectedImagePath,
+          imageBytes: effectiveBytes,
+          sampleAsset: state.selectedSampleAsset,
+          overallScore: response.overallScore,
+          riskLevel: RiskLevel.fromScore(response.overallScore),
+          title: '${response.severityLevel} Privacy & Security Exposure',
+          summary: response.findings.isEmpty
+              ? 'No sensitive visual markers were detected in this photograph.'
+              : 'Automated privacy assessment detected ${response.findings.length} sensitive exposure marker(s).',
+          detectedElements: response.findings
+              .map((f) => DetectedElement.fromJson(f))
+              .toList(),
+          categoryScores: {
+            for (final entry in response.categoryScores.entries)
+              ExposureCategory.fromString(entry.key): entry.value,
+          },
+          recommendations: response.recommendations
+              .map((r) => Recommendation.fromJson(r))
+              .toList(),
+          inferredInsights: response.inferences
+              .map((inf) => InferredInsight.fromJson(inf))
+              .toList(),
+          processingStatus: response.processingStatus,
+          analysisLimitations: response.analysisLimitations,
+          processingErrors: response.processingErrors,
+        );
       } else {
-        // Use intelligent onboard heuristic & sample simulator
-        report = await MockAnalysisService.analyzeImage(
-          imageBytes: bytes,
+        // Local Intelligence Pipeline
+        final IVisionAnalysisProvider provider;
+        if (settings.hasApiKey) {
+          provider = GeminiVisionProvider(apiKey: settings.apiKey);
+        } else {
+          provider = MockVisionProvider();
+        }
+
+        final pipeline = ZenithAnalysisPipeline(visionProvider: provider);
+
+        // Stage 3: Analyzing sensitive information
+        state = state.copyWith(status: ScanStatus.analyzingSensitiveInfo);
+        await Future.delayed(const Duration(milliseconds: 300));
+
+        // Stage 4: Calculating risk
+        state = state.copyWith(status: ScanStatus.calculatingRisk);
+        await Future.delayed(const Duration(milliseconds: 250));
+
+        // Stage 5: Preparing recommendations
+        state = state.copyWith(status: ScanStatus.preparingRecommendations);
+
+        report = await pipeline.execute(
+          imageBytes: effectiveBytes,
           imagePath: state.selectedImagePath,
           sampleAsset: state.selectedSampleAsset,
+          sensitivity: settings.sensitivity,
+          allowDegradedFallback: settings.useMockFallback,
         );
       }
 
-      // Stage 3: OPSEC risk matrix & attacker inference
-      state = state.copyWith(status: ScanStatus.threatModeling);
-      await Future.delayed(const Duration(milliseconds: 400));
-
-      // Stage 4: Synthesize security audit
-      state = state.copyWith(status: ScanStatus.synthesizing);
-      await Future.delayed(const Duration(milliseconds: 350));
-
-      // Save report in persistent storage
+      // Persist completed report to storage
       await StorageService.saveReport(report);
-
       final updatedHistory = await StorageService.loadHistory();
       final updatedStats = await StorageService.getAuditStats();
 
@@ -301,10 +411,22 @@ class AuditNotifier extends Notifier<AuditState> {
       );
 
       return report;
+    } on TimeoutException catch (te) {
+      state = state.copyWith(
+        status: ScanStatus.error,
+        errorMessage: 'Backend timeout: ${te.message}. Please retry.',
+      );
+      return null;
+    } on ImageValidationException catch (ive) {
+      state = state.copyWith(
+        status: ScanStatus.error,
+        errorMessage: 'Image validation error: ${ive.message}.',
+      );
+      return null;
     } catch (e) {
       state = state.copyWith(
         status: ScanStatus.error,
-        errorMessage: 'Privacy Analysis failed: $e',
+        errorMessage: 'Privacy Analysis failed: $e. You can retry the scan.',
       );
       return null;
     }

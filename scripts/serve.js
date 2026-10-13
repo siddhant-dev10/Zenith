@@ -74,12 +74,15 @@ const server = http.createServer((req, res) => {
   }
 
   // Normalize request URL
-  let reqUrl = decodeURI(req.url.split('?')[0]);
-  if (reqUrl.startsWith('/Zenith/')) {
-    reqUrl = reqUrl.substring('/Zenith'.length);
-  } else if (reqUrl === '/Zenith') {
-    reqUrl = '/index.html';
+  let rawUrl = decodeURI(req.url.split('?')[0]);
+  let reqUrl = rawUrl;
+
+  // Handle /zenith/ or /Zenith/ prefix case-insensitively
+  const isZenithPrefix = /^\/zenith(\/|$)/i.test(reqUrl);
+  if (isZenithPrefix) {
+    reqUrl = reqUrl.replace(/^\/zenith/i, '');
   }
+
   if (reqUrl === '/' || reqUrl === '') {
     reqUrl = '/index.html';
   }
@@ -95,7 +98,14 @@ const server = http.createServer((req, res) => {
 
   fs.stat(filePath, (err, stats) => {
     if (err) {
-      // Fallback to index.html for SPA routing if file not found
+      // For static assets (.js, .wasm, .png, etc.), do NOT return index.html
+      const ext = path.extname(reqUrl).toLowerCase();
+      if (ext && ext !== '.html') {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end(`404 Not Found: ${reqUrl}`);
+        return;
+      }
+      // Fallback to index.html for SPA routing if HTML route not found
       filePath = path.join(WEB_DIR, 'index.html');
     } else if (stats.isDirectory()) {
       filePath = path.join(filePath, 'index.html');
@@ -109,6 +119,17 @@ const server = http.createServer((req, res) => {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('404 Not Found');
         return;
+      }
+
+      // If serving index.html, dynamically match the base href to how the user accessed it
+      if (filePath.endsWith('index.html')) {
+        let htmlStr = content.toString('utf8');
+        if (isZenithPrefix) {
+          htmlStr = htmlStr.replace(/<base href="[^"]*">/i, '<base href="/zenith/">');
+        } else {
+          htmlStr = htmlStr.replace(/<base href="[^"]*">/i, '<base href="/">');
+        }
+        content = Buffer.from(htmlStr, 'utf8');
       }
 
       res.writeHead(200, {

@@ -28,11 +28,16 @@ class UserSettings {
     if (raw.isEmpty) {
       return ApiConfig.getDefaultBackendUrl();
     }
-    // Auto-migrate legacy defaults when compiled with explicit BACKEND_URL
+    // Auto-migrate legacy defaults when compiled with explicit API_BASE_URL
     if (ApiConfig.hasCompileTimeOverride &&
         (raw == ApiConfig.defaultEmulatorUrl ||
          raw == ApiConfig.defaultLocalhostUrl ||
-         raw == 'http://127.0.0.1:8080')) {
+         raw == 'http://127.0.0.1:8080' ||
+         raw == 'https://api.zenith.privacy')) {
+      return ApiConfig.getDefaultBackendUrl();
+    }
+    // Clean up fake legacy placeholder URL if previously saved
+    if (raw == 'https://api.zenith.privacy') {
       return ApiConfig.getDefaultBackendUrl();
     }
     // On physical Android devices where 10.0.2.2 or localhost fails,

@@ -36,7 +36,20 @@ class _SystemConfigTabState extends ConsumerState<SystemConfigTab> {
     });
 
     final settings = ref.read(settingsProvider);
-    final url = '${settings.backendUrl}/health';
+    final backendUrl = settings.backendUrl.trim();
+
+    if (backendUrl.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _healthError =
+              'Live analysis is not configured. The site owner must set the production API URL and redeploy.';
+          _isCheckingHealth = false;
+        });
+      }
+      return;
+    }
+
+    final url = '$backendUrl/health';
 
     try {
       final res = await http

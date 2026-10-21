@@ -74,5 +74,15 @@ void main() {
         expect(diag, contains('Unable to connect to Zenith backend at http://10.0.2.2:8080'));
       }
     });
+
+    test('ApiConfig.diagnoseConnectionError handles empty targetUrl with configuration guidance', () {
+      final diag = ApiConfig.diagnoseConnectionError(Exception('empty'), '');
+      expect(diag, contains('site owner must set the production API URL'));
+    });
+
+    test('UserSettings migrates legacy placeholder https://api.zenith.privacy', () {
+      const legacySettings = UserSettings(backendUrl: 'https://api.zenith.privacy');
+      expect(legacySettings.backendUrl, equals(ApiConfig.getDefaultBackendUrl()));
+    });
   });
 }

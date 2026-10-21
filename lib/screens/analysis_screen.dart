@@ -23,6 +23,10 @@ class AnalysisScreen extends ConsumerStatefulWidget {
 }
 
 class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
+  bool _isRetrying = false;
+  bool _isCheckingHealth = false;
+  String? _healthDiagnostic;
+
   @override
   void initState() {
     super.initState();
@@ -32,19 +36,66 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
   }
 
   Future<void> _startAnalysis() async {
-    final notifier = ref.read(auditProvider.notifier);
-    final report = await notifier.runAnalysis();
-    if (mounted && report != null) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, anim, secAnim) =>
-              ResultsScreen(report: report),
-          transitionsBuilder: (context, anim, secAnim, child) {
-            return FadeTransition(opacity: anim, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
+    final auditState = ref.read(auditProvider);
+    if (auditState.isScanning || _isRetrying) return;
+
+    setState(() {
+      _isRetrying = true;
+      _healthDiagnostic = null;
+    });
+
+    try {
+      final notifier = ref.read(auditProvider.notifier);
+      final report = await notifier.runAnalysis();
+      if (mounted && report != null) {
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, anim, secAnim) =>
+                ResultsScreen(report: report),
+            transitionsBuilder: (context, anim, secAnim, child) {
+              return FadeTransition(opacity: anim, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRetrying = false);
+      }
+    }
+  }
+
+  Future<void> _runHealthCheck() async {
+    if (_isCheckingHealth) return;
+    setState(() {
+      _isCheckingHealth = true;
+      _healthDiagnostic = null;
+    });
+
+    try {
+      final client = ref.read(auditProvider.notifier).apiClient;
+      final health = await client.checkHealth();
+      if (mounted) {
+        final service = health['service'] ?? 'zenith';
+        final isGemini = health['geminiConfigured'] == true;
+        final provider = health['provider'] ?? 'gemini';
+        setState(() {
+          _isCheckingHealth = false;
+          _healthDiagnostic =
+              'Backend is online ($service).\n'
+              '• Vision Provider: $provider\n'
+              '• Gemini Status: ${isGemini ? "Active (Ready)" : "Unconfigured (Missing API key on server)"}';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCheckingHealth = false;
+          final clean = e.toString().replaceFirst('Exception: ', '');
+          _healthDiagnostic = clean;
+        });
+      }
     }
   }
 
@@ -178,131 +229,228 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
 
                         // Error Overlay
                         if (isError)
-                          Container(
-                            color: Colors.black87,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.error_outline_rounded,
-                                    size: 42,
-                                    color: AppColors.riskCritical,
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    'Analysis Failed',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.04),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.08),
+                          Builder(
+                            builder: (context) {
+                              final errText = auditState.errorMessage ?? '';
+                              final isMissingConfig =
+                                  errText.contains('Live analysis is not configured') ||
+                                  (kIsWeb && settings.backendUrl.trim().isEmpty);
+                              final isOffline =
+                                  errText.toLowerCase().contains('connection') ||
+                                  errText.toLowerCase().contains('unable to reach') ||
+                                  errText.toLowerCase().contains('timed out') ||
+                                  errText.toLowerCase().contains('socket') ||
+                                  errText.toLowerCase().contains('failed to fetch');
+                              final isCreds =
+                                  errText.toLowerCase().contains('credentials required') ||
+                                  errText.toLowerCase().contains('gemini_api_key');
+                              final isRateLimit =
+                                  errText.toLowerCase().contains('rate limit') ||
+                                  errText.toLowerCase().contains('quota');
+
+                              final failureTitle = isMissingConfig
+                                  ? 'Live Analysis Not Configured'
+                                  : (isOffline
+                                        ? 'Backend Server Unreachable'
+                                        : (isCreds
+                                              ? 'Gemini Credentials Required'
+                                              : (isRateLimit
+                                                    ? 'Rate Limit Exceeded'
+                                                    : 'Analysis Failed')));
+
+                              return Container(
+                                color: Colors.black87,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        isMissingConfig
+                                            ? Icons.cloud_off_rounded
+                                            : Icons.error_outline_rounded,
+                                        size: 42,
+                                        color: AppColors.riskCritical,
                                       ),
-                                    ),
-                                    child: Text(
-                                      auditState.errorMessage ??
-                                          'An unexpected error occurred during scan.',
-                                      textAlign: TextAlign.left,
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 11,
-                                        color: AppColors.textMuted,
-                                        height: 1.35,
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        failureTitle,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                        textAlign: TextAlign.center,
                                       ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  if ((auditState.errorMessage ?? '').toLowerCase().contains('connection') ||
-                                      (auditState.errorMessage ?? '').toLowerCase().contains('10.0.2.2') ||
-                                      (auditState.errorMessage ?? '').toLowerCase().contains('localhost') ||
-                                      (auditState.errorMessage ?? '').toLowerCase().contains('socket') ||
-                                      (auditState.errorMessage ?? '').toLowerCase().contains('timed out')) ...[
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton.icon(
-                                        onPressed: () async {
-                                          await ref
-                                              .read(settingsProvider.notifier)
-                                              .updateBackendUrl(ApiConfig.defaultLanUrl);
-                                          _startAnalysis();
-                                        },
-                                        icon: const Icon(Icons.wifi_rounded, size: 16),
-                                        label: Text(
-                                          'Connect to Mac (${ApiConfig.defaultLanUrl})',
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.04),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: Colors.white.withOpacity(0.08),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          errText.isNotEmpty
+                                              ? errText
+                                              : 'An unexpected error occurred during scan.',
+                                          textAlign: TextAlign.left,
                                           style: GoogleFonts.jetBrainsMono(
                                             fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.primaryCyan,
-                                          foregroundColor: Colors.black,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 10,
+                                            color: AppColors.textMuted,
+                                            height: 1.35,
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                  ],
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    alignment: WrapAlignment.center,
-                                    children: [
-                                      OutlinedButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: Colors.white,
-                                          side: const BorderSide(
-                                            color: AppColors.darkBorder,
-                                          ),
-                                        ),
-                                        child: const Text('Back'),
-                                      ),
-                                      OutlinedButton.icon(
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => const SettingsScreen(),
+                                      if (_healthDiagnostic != null) ...[
+                                        const SizedBox(height: 10),
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primaryCyan.withOpacity(0.08),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: AppColors.primaryCyan.withOpacity(0.3),
                                             ),
-                                          );
-                                        },
-                                        icon: const Icon(Icons.settings_outlined, size: 16),
-                                        label: const Text('Settings'),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: AppColors.primaryCyan,
-                                          side: const BorderSide(
-                                            color: AppColors.primaryCyan,
+                                          ),
+                                          child: Text(
+                                            _healthDiagnostic!,
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10.5,
+                                              color: AppColors.primaryCyan,
+                                              height: 1.3,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: _startAnalysis,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.primaryCyan,
-                                          foregroundColor: AppColors.darkBg,
+                                      ],
+                                      const SizedBox(height: 12),
+                                      if (!kIsWeb && Platform.isAndroid && isOffline) ...[
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: ElevatedButton.icon(
+                                            onPressed: () async {
+                                              await ref
+                                                  .read(settingsProvider.notifier)
+                                                  .updateBackendUrl(ApiConfig.defaultLanUrl);
+                                              _startAnalysis();
+                                            },
+                                            icon: const Icon(Icons.wifi_rounded, size: 16),
+                                            label: Text(
+                                              'Connect to Mac (${ApiConfig.defaultLanUrl})',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.primaryCyan,
+                                              foregroundColor: Colors.black,
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 10,
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                        child: const Text('Retry Scan'),
+                                        const SizedBox(height: 10),
+                                      ],
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        alignment: WrapAlignment.center,
+                                        children: [
+                                          OutlinedButton(
+                                            onPressed: () => Navigator.pop(context),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.white,
+                                              side: const BorderSide(
+                                                color: AppColors.darkBorder,
+                                              ),
+                                            ),
+                                            child: const Text('Back'),
+                                          ),
+                                          if (settings.backendUrl.trim().isNotEmpty)
+                                            OutlinedButton.icon(
+                                              onPressed: _isCheckingHealth
+                                                  ? null
+                                                  : _runHealthCheck,
+                                              icon: _isCheckingHealth
+                                                  ? const SizedBox(
+                                                      width: 12,
+                                                      height: 12,
+                                                      child: CircularProgressIndicator(
+                                                        strokeWidth: 1.5,
+                                                        color: AppColors.primaryCyan,
+                                                      ),
+                                                    )
+                                                  : const Icon(Icons.favorite_outline, size: 15),
+                                              label: const Text('Check Health'),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: AppColors.primaryCyan,
+                                                side: const BorderSide(
+                                                  color: AppColors.primaryCyan,
+                                                ),
+                                              ),
+                                            ),
+                                          OutlinedButton.icon(
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) => const SettingsScreen(),
+                                                ),
+                                              );
+                                            },
+                                            icon: const Icon(Icons.settings_outlined, size: 16),
+                                            label: const Text('Settings'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: isMissingConfig
+                                                  ? AppColors.primaryCyan
+                                                  : Colors.white,
+                                              side: BorderSide(
+                                                color: isMissingConfig
+                                                    ? AppColors.primaryCyan
+                                                    : AppColors.darkBorder,
+                                              ),
+                                            ),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: (_isRetrying || auditState.isScanning)
+                                                ? null
+                                                : _startAnalysis,
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.primaryCyan,
+                                              foregroundColor: AppColors.darkBg,
+                                            ),
+                                            child: _isRetrying
+                                                ? const SizedBox(
+                                                    width: 16,
+                                                    height: 16,
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      valueColor:
+                                                          AlwaysStoppedAnimation<Color>(
+                                                        AppColors.darkBg,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : const Text('Retry Scan'),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                ],
-                              ),
-                            ),
+                                ),
+                              );
+                            },
                           ),
                       ],
                     ),

@@ -10,39 +10,41 @@ import 'package:zenith/core/privacy_engine/testing/test_case_repository.dart';
 import 'package:zenith/core/privacy_engine/testing/test_evaluator.dart';
 import 'package:zenith/core/privacy_engine/validation/image_validator.dart';
 
-// In-memory cache for generated analyses (supports GET /v1/analyses/:id)
-final Map<String, AnalyzeImageResponse> _recentAnalyses = {};
-final File _auditsFile = File('data/audits.json');
+final Map<String, List<DateTime>> _analysisRequestsByAddress = {};
+final Map<String, DateTime> _lastTestRunByAddress = {};
 
-Future<void> _loadStoredAudits() async {
-  if (await _auditsFile.exists()) {
-    try {
-      final content = await _auditsFile.readAsString();
-      final list = jsonDecode(content) as List;
-      for (final item in list) {
-        final resp = AnalyzeImageResponse.fromJson(
-          Map<String, dynamic>.from(item as Map),
-        );
-        _recentAnalyses[resp.analysisId] = resp;
-      }
-    } catch (e) {
-      stderr.writeln('Warning: Failed to load stored audits: $e');
-    }
-  }
+String _clientAddress(HttpRequest request) {
+  final forwardedFor = request.headers.value('X-Forwarded-For');
+  final clientAddress = forwardedFor?.split(',').first.trim();
+  return clientAddress?.isNotEmpty == true
+      ? clientAddress!
+      : (request.connectionInfo?.remoteAddress.address ?? 'unknown');
 }
 
-Future<void> _saveStoredAudit(AnalyzeImageResponse response) async {
-  try {
-    _recentAnalyses[response.analysisId] = response;
-    final parentDir = _auditsFile.parent;
-    if (!await parentDir.exists()) {
-      await parentDir.create(recursive: true);
-    }
-    final allList = _recentAnalyses.values.map((r) => r.toJson()).toList();
-    await _auditsFile.writeAsString(jsonEncode(allList));
-  } catch (e) {
-    stderr.writeln('Warning: Failed to persist audit to data/audits.json: $e');
+bool _allowAnalysisRequest(String address) {
+  final now = DateTime.now();
+  if (_analysisRequestsByAddress.length > 5000) {
+    _analysisRequestsByAddress.removeWhere(
+      (_, entries) => entries.every(
+        (at) => now.difference(at) >= const Duration(minutes: 1),
+      ),
+    );
   }
+  if (_lastTestRunByAddress.length > 5000) {
+    _lastTestRunByAddress.removeWhere(
+      (_, at) => now.difference(at) >= const Duration(minutes: 5),
+    );
+  }
+  final recent = (_analysisRequestsByAddress[address] ?? [])
+      .where((at) => now.difference(at) < const Duration(minutes: 1))
+      .toList();
+  if (recent.length >= 20) {
+    _analysisRequestsByAddress[address] = recent;
+    return false;
+  }
+  recent.add(now);
+  _analysisRequestsByAddress[address] = recent;
+  return true;
 }
 
 Map<String, String> _loadDotEnv() {
@@ -81,7 +83,6 @@ Future<HttpServer> startZenithServer({
   final trRepo = testRunRepo ?? ZenithTestRunRepository();
   final seeder = ZenithTestCaseSeeder(tcRepo);
   await seeder.seedInitialCases();
-  await _loadStoredAudits();
 
   final evaluator = ZenithTestEvaluator(
     testCaseRepo: tcRepo,
@@ -154,9 +155,7 @@ void main(List<String> args) async {
   stdout.writeln(
     '  Analyze API:  POST http://localhost:${server.port}/api/v1/analyze',
   );
-  stdout.writeln(
-    '  Audits API:   GET  http://localhost:${server.port}/api/v1/audits',
-  );
+  stdout.writeln('  Audit records are retained by this server: no');
   stdout.writeln(
     '  Test Cases:   GET  http://localhost:${server.port}/api/v1/test-cases',
   );
@@ -185,19 +184,36 @@ Future<void> handleRequest(
 
   final res = request.response;
 
-  // Add standard CORS headers
-  res.headers.set('Access-Control-Allow-Origin', '*');
-  res.headers.set(
-    'Access-Control-Allow-Methods',
-    'GET, POST, PATCH, DELETE, OPTIONS',
-  );
-  res.headers.set(
-    'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-Client-Request-Id',
-  );
+  // Allow only configured browser origins. Non-browser API clients do not use CORS.
+  final origin = request.headers.value('Origin');
+  final configuredOrigins =
+      (Platform.environment['ZENITH_ALLOWED_ORIGINS'] ??
+              'https://siddhant-dev10.github.io,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8000,http://127.0.0.1:8080')
+          .split(',')
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet();
+  final originAllowed =
+      origin != null &&
+      (configuredOrigins.contains('*') || configuredOrigins.contains(origin));
+  if (originAllowed) {
+    res.headers.set('Access-Control-Allow-Origin', origin);
+    res.headers.set('Vary', 'Origin');
+    res.headers.set(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PATCH, DELETE, OPTIONS',
+    );
+    res.headers.set(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, X-Client-Request-Id, Accept',
+    );
+    res.headers.set('Access-Control-Max-Age', '86400');
+  }
 
   if (request.method == 'OPTIONS') {
-    res.statusCode = HttpStatus.noContent;
+    res.statusCode = originAllowed || origin == null
+        ? HttpStatus.noContent
+        : HttpStatus.forbidden;
     await res.close();
     return;
   }
@@ -228,21 +244,47 @@ Future<void> handleRequest(
       return;
     }
 
-    // Audits List Endpoint (GET /v1/audits or /api/v1/audits)
+    // Stored audit records are intentionally not exposed or retained by the server.
     if (request.method == 'GET' &&
         (path == '/v1/audits' || path == '/api/v1/audits')) {
-      res.statusCode = HttpStatus.ok;
-      res.headers.contentType = ContentType.json;
-      final audits = _recentAnalyses.values.toList()
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      res.write(jsonEncode(audits.map((a) => a.toJson()).toList()));
-      await res.close();
+      _sendError(
+        res,
+        HttpStatus.forbidden,
+        type: 'https://zenith.privacy/errors/audit-access-disabled',
+        title: 'Audit History Unavailable',
+        detail:
+            'Server-side audit history is disabled to protect user privacy.',
+        instance: path,
+      );
       return;
     }
 
     // 2. Ingest and Analyze Image (POST /v1/analyze or /api/v1/analyze)
     if (request.method == 'POST' &&
         (path == '/v1/analyze' || path == '/api/v1/analyze')) {
+      const maxPayloadBytes = 35 * 1024 * 1024; // 35 MB
+      if (request.contentLength > maxPayloadBytes) {
+        _sendError(
+          res,
+          HttpStatus.requestEntityTooLarge,
+          type: 'https://zenith.privacy/errors/payload-too-large',
+          title: 'Payload Too Large',
+          detail: 'Request body exceeds the maximum permitted size of 35MB.',
+          instance: path,
+        );
+        return;
+      }
+      if (!_allowAnalysisRequest(_clientAddress(request))) {
+        _sendError(
+          res,
+          HttpStatus.tooManyRequests,
+          type: 'https://zenith.privacy/errors/rate-limit-exceeded',
+          title: 'Too Many Analysis Requests',
+          detail: 'This network has reached the analysis limit. Wait one minute and retry.',
+          instance: path,
+        );
+        return;
+      }
       final bodyStr = await utf8.decodeStream(request);
       final Map<String, dynamic> body;
       try {
@@ -322,8 +364,6 @@ Future<void> handleRequest(
         );
 
         final apiResponse = AnalyzeImageResponse.fromReport(report);
-        await _saveStoredAudit(apiResponse);
-
         res.statusCode = HttpStatus.ok;
         res.headers.contentType = ContentType.json;
         res.write(jsonEncode(apiResponse.toJson()));
@@ -342,23 +382,35 @@ Future<void> handleRequest(
         final status = e.isRateLimit
             ? HttpStatus.tooManyRequests
             : (e.statusCode ?? HttpStatus.badGateway);
-        final isAuthOrConfig =
+        final isAuthOrConfig = status == HttpStatus.serviceUnavailable;
+        final isInvalidCredential =
+            status == HttpStatus.badRequest ||
             status == HttpStatus.unauthorized ||
-            status == HttpStatus.serviceUnavailable;
+            status == HttpStatus.forbidden;
         _sendError(
           res,
           status,
           type: isAuthOrConfig
               ? 'https://zenith.privacy/errors/missing-credentials'
-              : (e.isRateLimit
-                    ? 'https://zenith.privacy/errors/rate-limit-exceeded'
-                    : 'https://zenith.privacy/errors/vision-provider-failed'),
+              : (isInvalidCredential
+                    ? 'https://zenith.privacy/errors/invalid-credentials'
+                    : (e.isRateLimit
+                          ? 'https://zenith.privacy/errors/rate-limit-exceeded'
+                          : 'https://zenith.privacy/errors/vision-provider-failed')),
           title: isAuthOrConfig
               ? 'Gemini Credentials Required'
-              : (e.isRateLimit
-                    ? 'Rate Limit Exceeded'
-                    : 'Vision Provider Failed'),
-          detail: e.message,
+              : (isInvalidCredential
+                    ? 'Gemini Credentials Invalid'
+                    : (e.isRateLimit
+                          ? 'Rate Limit Exceeded'
+                          : 'Vision Provider Failed')),
+          detail: isAuthOrConfig
+              ? 'Live analysis is not configured. The site owner must configure GEMINI_API_KEY on the backend.'
+              : (isInvalidCredential
+                    ? 'The backend Gemini credentials were rejected. The site owner must check GEMINI_API_KEY.'
+                    : (e.isRateLimit
+                          ? 'The Gemini quota or rate limit has been reached. Retry later.'
+                          : 'The Gemini provider could not complete this analysis. Retry later or contact the site owner.')),
           instance: path,
           requestId: clientRequestId,
         );
@@ -368,7 +420,7 @@ Future<void> handleRequest(
           HttpStatus.internalServerError,
           type: 'https://zenith.privacy/errors/pipeline-execution-failed',
           title: 'Pipeline Execution Error',
-          detail: e.toString(),
+          detail: 'Analysis could not be completed due to an internal server error.',
           instance: path,
           requestId: clientRequestId,
         );
@@ -376,34 +428,47 @@ Future<void> handleRequest(
       return;
     }
 
-    // 3. Retrieve Historical Analysis by ID (GET /api/v1/analyses/:id or /v1/analyses/:id)
+    // Historical server-side analyses are not retained.
     if (request.method == 'GET' &&
         (path.startsWith('/v1/analyses/') ||
             path.startsWith('/api/v1/analyses/'))) {
-      final id = path.split('/').last;
-      final cached = _recentAnalyses[id];
-      if (cached != null) {
-        res.statusCode = HttpStatus.ok;
-        res.headers.contentType = ContentType.json;
-        res.write(jsonEncode(cached.toJson()));
-        await res.close();
-        return;
-      } else {
-        _sendError(
-          res,
-          HttpStatus.notFound,
-          type: 'https://zenith.privacy/errors/analysis-not-found',
-          title: 'Analysis Not Found',
-          detail: 'No analysis report found for ID "$id".',
-          instance: path,
-        );
-        return;
-      }
+      _sendError(
+        res,
+        HttpStatus.notFound,
+        type: 'https://zenith.privacy/errors/analysis-not-found',
+        title: 'Analysis Not Found',
+        detail: 'Server-side analysis history is disabled for privacy.',
+        instance: path,
+      );
+      return;
     }
 
     // 4. Verify Rescan (POST /v1/rescan or /api/v1/rescan)
     if (request.method == 'POST' &&
         (path == '/v1/rescan' || path == '/api/v1/rescan')) {
+      const maxPayloadBytes = 35 * 1024 * 1024; // 35 MB
+      if (request.contentLength > maxPayloadBytes) {
+        _sendError(
+          res,
+          HttpStatus.requestEntityTooLarge,
+          type: 'https://zenith.privacy/errors/payload-too-large',
+          title: 'Payload Too Large',
+          detail: 'Request body exceeds the maximum permitted size of 35MB.',
+          instance: path,
+        );
+        return;
+      }
+      if (!_allowAnalysisRequest(_clientAddress(request))) {
+        _sendError(
+          res,
+          HttpStatus.tooManyRequests,
+          type: 'https://zenith.privacy/errors/rate-limit-exceeded',
+          title: 'Too Many Analysis Requests',
+          detail: 'This network has reached the analysis limit. Wait one minute and retry.',
+          instance: path,
+        );
+        return;
+      }
       final bodyStr = await utf8.decodeStream(request);
       final Map<String, dynamic> body;
       try {
@@ -497,7 +562,7 @@ Future<void> handleRequest(
           HttpStatus.internalServerError,
           type: 'https://zenith.privacy/errors/rescan-failed',
           title: 'Rescan Execution Error',
-          detail: e.toString(),
+          detail: 'The rescan could not be completed due to a provider error.',
           instance: path,
         );
       }
@@ -600,6 +665,22 @@ Future<void> handleRequest(
         await res.close();
         return;
       } else if (request.method == 'POST') {
+        final address = _clientAddress(request);
+        final now = DateTime.now();
+        final previous = _lastTestRunByAddress[address];
+        if (previous != null &&
+            now.difference(previous) < const Duration(minutes: 5)) {
+          _sendError(
+            res,
+            HttpStatus.tooManyRequests,
+            type: 'https://zenith.privacy/errors/rate-limit-exceeded',
+            title: 'Benchmark Run Limit Reached',
+            detail: 'A benchmark was run recently from this network. Wait five minutes and retry.',
+            instance: path,
+          );
+          return;
+        }
+        _lastTestRunByAddress[address] = now;
         List<String>? selectedCaseIds;
         final bodyStr = await utf8.decodeStream(request);
         if (bodyStr.trim().isNotEmpty) {
@@ -666,7 +747,7 @@ Future<void> handleRequest(
       HttpStatus.internalServerError,
       type: 'https://zenith.privacy/errors/unhandled-exception',
       title: 'Server Error',
-      detail: e.toString(),
+      detail: 'The request could not be completed due to a server error.',
       instance: path,
     );
   }

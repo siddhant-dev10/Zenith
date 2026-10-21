@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -49,6 +50,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final targetUrl = ApiConfig.sanitizeUrl(raw);
     _backendUrlController.text = targetUrl;
 
+    if (targetUrl.trim().isEmpty) {
+      setState(() {
+        _isTestingBackend = false;
+        _backendTestSuccess = false;
+        _backendTestDiagnostic =
+            'Please enter a backend URL (e.g. https://your-service.onrender.com) before testing.';
+      });
+      return;
+    }
+
+    final parsed = Uri.tryParse(targetUrl);
+    final isLocalhost = parsed?.host == 'localhost' || parsed?.host == '127.0.0.1';
+    if (kIsWeb && kReleaseMode && isLocalhost) {
+      setState(() {
+        _isTestingBackend = false;
+        _backendTestSuccess = false;
+        _backendTestDiagnostic =
+            'Cannot use localhost on the live website. In a browser, "localhost" points to the visitor\'s computer, not the Zenith server. Please provide a public HTTPS backend URL.';
+      });
+      return;
+    }
+
     setState(() {
       _isTestingBackend = true;
       _backendTestSuccess = null;
@@ -57,7 +80,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     try {
       final uri = Uri.parse('$targetUrl/health');
-      final resp = await http.get(uri).timeout(const Duration(seconds: 5));
+      final resp = await http.get(uri).timeout(const Duration(seconds: 8));
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         final isConfigured = data['geminiConfigured'] == true;
@@ -71,7 +94,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 'Connected to Zenith Engine!\n'
                 '• Service: ${data["service"] ?? "zenith"}\n'
                 '• Vision Provider: $provider\n'
-                '• Gemini API: ${isConfigured ? "ACTIVE (Live AI)" : "UNCONFIGURED (Mock/503)"}';
+                '• Gemini API: ${isConfigured ? "ACTIVE (Live AI)" : "UNCONFIGURED (Missing API key on server)"}';
           });
         }
       } else {
@@ -159,6 +182,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           children: [
+            if (!kIsWeb) ...[
             // 1. Gemini Vision API Key Section
             _buildSectionHeader('AI VISION ENGINE CONFIGURATION'),
             const SizedBox(height: 8),
@@ -364,6 +388,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
              const SizedBox(height: 24),
+            ],
 
             // 2. Zenith Backend Connectivity & Endpoint Configuration
             _buildSectionHeader('BACKEND CONNECTIVITY & ENDPOINT'),
@@ -475,16 +500,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          _buildPresetChip('📱 Wi-Fi LAN', ApiConfig.defaultLanUrl),
-                          const SizedBox(width: 8),
-                          _buildPresetChip('🤖 Emulator', ApiConfig.defaultEmulatorUrl),
-                          const SizedBox(width: 8),
-                          _buildPresetChip('💻 Localhost', ApiConfig.defaultLocalhostUrl),
-                          const SizedBox(width: 8),
-                          _buildPresetChip('🔒 Prod HTTPS', ApiConfig.defaultProductionUrl),
+                          if (kIsWeb) ...[
+                            if (ApiConfig.hasCompileTimeOverride) ...[
+                              _buildPresetChip('🔒 Configured API', ApiConfig.compileTimeBackendUrl),
+                              const SizedBox(width: 8),
+                            ],
+                            if (!kReleaseMode) ...[
+                              _buildPresetChip('💻 Localhost (Dev)', ApiConfig.defaultLocalhostUrl),
+                              const SizedBox(width: 8),
+                            ],
+                          ] else ...[
+                            _buildPresetChip('💻 Localhost', ApiConfig.defaultLocalhostUrl),
+                            const SizedBox(width: 8),
+                            _buildPresetChip('🤖 Emulator', ApiConfig.defaultEmulatorUrl),
+                            const SizedBox(width: 8),
+                            _buildPresetChip('📱 Wi-Fi LAN', ApiConfig.defaultLanUrl),
+                            if (ApiConfig.hasCompileTimeOverride) ...[
+                              const SizedBox(width: 8),
+                              _buildPresetChip('🔒 Prod HTTPS', ApiConfig.compileTimeBackendUrl),
+                            ],
+                          ],
                         ],
                       ),
                     ),
+                    if (kIsWeb && !ApiConfig.hasCompileTimeOverride) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        '💡 Web builds require a public HTTPS backend. Enter your deployed server URL above.',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 14),
                     Row(
                       children: [

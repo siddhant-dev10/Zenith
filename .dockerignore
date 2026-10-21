@@ -1,0 +1,9 @@
+.git
+.dart_tool
+.build
+build
+coverage
+.env
+.env.*
+**/*.iml
+**/.DS_Store

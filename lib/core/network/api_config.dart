@@ -1,8 +1,10 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 
 /// Centralized environment-specific API configuration and connectivity diagnostics.
 class ApiConfig {
+  static bool get _isWeb =>
+      Uri.base.scheme == 'http' || Uri.base.scheme == 'https';
+
   /// Standard loopback address for desktop, macOS, Linux, and Windows development.
   static const String defaultLocalhostUrl = 'http://localhost:8080';
 
@@ -12,17 +14,22 @@ class ApiConfig {
   /// Standard development Mac Wi-Fi LAN address for physical Android devices.
   static const String defaultLanUrl = 'http://192.168.0.16:8080';
 
-  /// Default production / staging HTTPS backend template (if configured).
-  static const String defaultProductionUrl = 'https://api.zenith.privacy';
-
-  /// Compile-time environment override via `--dart-define=BACKEND_URL=https://...`
+  /// Compile-time environment override via `--dart-define=API_BASE_URL=https://...`
+  /// or legacy `--dart-define=BACKEND_URL=https://...`
   static const String _compileTimeBackendUrl = String.fromEnvironment(
-    'BACKEND_URL',
-    defaultValue: '',
+    'API_BASE_URL',
+    defaultValue: String.fromEnvironment(
+      'BACKEND_URL',
+      defaultValue: '',
+    ),
   );
 
   /// Whether a compile-time backend URL override was provided.
-  static bool get hasCompileTimeOverride => _compileTimeBackendUrl.trim().isNotEmpty;
+  static bool get hasCompileTimeOverride =>
+      _compileTimeBackendUrl.trim().isNotEmpty;
+
+  /// Returns the compile-time configured backend URL if present.
+  static String get compileTimeBackendUrl => _compileTimeBackendUrl.trim();
 
   /// Resolves the recommended default backend URL based on platform & environment.
   static String getDefaultBackendUrl() {
@@ -32,8 +39,10 @@ class ApiConfig {
     }
 
     // 2. Web platform
-    if (kIsWeb) {
-      return defaultLocalhostUrl;
+    if (_isWeb) {
+      // A browser visitor's localhost is their own machine. Never silently
+      // direct a deployed web build to a developer's local server.
+      return '';
     }
 
     // 3. Android platform (physical device or emulator)
@@ -70,9 +79,39 @@ class ApiConfig {
   /// human-readable diagnostic message explaining what went wrong and how to fix it.
   static String diagnoseConnectionError(Object error, String targetUrl) {
     final errStr = error.toString();
-    final uri = Uri.tryParse(targetUrl);
+    final trimmedUrl = targetUrl.trim();
+
+    if (trimmedUrl.isEmpty) {
+      return 'Live analysis is not configured for this website. The site owner must set the production API URL and redeploy.';
+    }
+
+    final uri = Uri.tryParse(trimmedUrl);
     final host = uri?.host.toLowerCase() ?? '';
-    final isAndroid = !kIsWeb && Platform.isAndroid;
+
+    // Web Platform Diagnostics
+    if (_isWeb) {
+      if (host == 'localhost' || host == '127.0.0.1' || host == '::1') {
+        return 'Cannot connect to "$trimmedUrl": In a web browser, "localhost" refers to the visitor\'s machine, not the Zenith backend server.\n\n'
+            '• Site Owner: Deploy the Zenith Dart backend to an HTTPS host and configure API_BASE_URL.\n'
+            '• Visitor: Configure a reachable public HTTPS backend in Settings.';
+      }
+      if (host.startsWith('192.168.') || host.startsWith('10.') || host.startsWith('172.')) {
+        return 'Cannot connect to private LAN address "$trimmedUrl" from the public web.\n\n'
+            '• Web browsers cannot reach private local networks due to browser security restrictions.\n'
+            '• Deploy the Zenith backend to a public HTTPS host (e.g. Render, Railway, Cloud Run).';
+      }
+      if (errStr.contains('Timeout') || errStr.contains('timed out')) {
+        return 'Request to $trimmedUrl timed out.\n'
+            '• Check that the backend server is running and accessible over HTTPS.\n'
+            '• If using a free-tier hosting instance, it may be waking up from sleep.';
+      }
+      return 'Unable to reach Zenith backend at $trimmedUrl.\n\n'
+          '• Verify the backend service is running and accessible over HTTPS.\n'
+          '• Ensure the server CORS configuration allows "${Uri.base.origin}".\n'
+          '• Check browser developer console for SSL or CORS errors.';
+    }
+
+    final isAndroid = Platform.isAndroid;
 
     // Case 1: Localhost on Android (Connection Refused errno 111)
     if (isAndroid && (host == 'localhost' || host == '127.0.0.1')) {
@@ -94,14 +133,17 @@ class ApiConfig {
     }
 
     // Case 2: Cleartext HTTP blocked by Android OS
-    if (errStr.contains('Cleartext') || errStr.contains('CLEARTEXT_COMMUNICATION_NOT_PERMITTED')) {
+    if (errStr.contains('Cleartext') ||
+        errStr.contains('CLEARTEXT_COMMUNICATION_NOT_PERMITTED')) {
       return 'Android Network Security Policy blocked cleartext HTTP traffic to $targetUrl.\n'
           'Ensure android:usesCleartextTraffic="true" is configured for local development, '
           'or use an HTTPS server.';
     }
 
     // Case 3: Connection refused on 10.0.2.2 or LAN IP
-    if (errStr.contains('Connection refused') || errStr.contains('errno = 111') || errStr.contains('errno = 61')) {
+    if (errStr.contains('Connection refused') ||
+        errStr.contains('errno = 111') ||
+        errStr.contains('errno = 61')) {
       return 'Unable to connect to Zenith backend at $targetUrl (Connection Refused).\n\n'
           '1. Verify the Zenith server is running: "dart run bin/zenith_server.dart --port 8080"\n'
           '2. Ensure the server binds to all interfaces (0.0.0.0), not just 127.0.0.1.\n'

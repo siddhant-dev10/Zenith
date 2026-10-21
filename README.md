@@ -4,7 +4,7 @@
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.5-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.13.4-0175C2?logo=dart&logoColor=white)](https://dart.dev)
 [![Gemini Vision](https://img.shields.io/badge/Gemini_Vision-3.8_Flash-8E75B2?logo=google&logoColor=white)](https://ai.google.dev)
-[![Tests Passing](https://img.shields.io/badge/Tests-72%2F72_Passing-brightgreen?logo=checkmarx&logoColor=white)](test/)
+[![CI](https://github.com/siddhant-dev10/Zenith/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/siddhant-dev10/Zenith/actions/workflows/deploy-pages.yml)
 [![Benchmark](https://img.shields.io/badge/Benchmark_Suite-120_Cases_(100%25_Pass)-success)](data/test_cases.json)
 [![Android APK](https://img.shields.io/badge/Android_APK-v1.0.0_Download-3DDC84?logo=android&logoColor=white)](assets/apk/zenith-v1.0.0.apk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -15,7 +15,8 @@
 
 ### 🌐 Quick Access & Live Deployments
 
-- 🚀 **Live Interactive Web Demo**: **[https://siddhant-dev10.github.io/Zenith/](https://siddhant-dev10.github.io/Zenith/)**
+- 🚀 **Live Interactive Web Application**: **[https://siddhant-dev10.github.io/Zenith/](https://siddhant-dev10.github.io/Zenith/)**
+- ⚙️ **Backend Status**: Standalone Dart service deployable to Render / Cloud Run / Docker. Live AI analysis requires the backend URL set via `API_BASE_URL` (or configured in Settings).
 - 📱 **Download Android Release APK**: **[`assets/apk/zenith-v1.0.0.apk`](assets/apk/zenith-v1.0.0.apk)**
   - *Direct Web Download*: **[Download APK from Web](https://siddhant-dev10.github.io/Zenith/assets/apk/zenith-v1.0.0.apk)**
 - 🐙 **GitHub Repository**: **[https://github.com/siddhant-dev10/Zenith](https://github.com/siddhant-dev10/Zenith)**
@@ -24,6 +25,11 @@
 ---
 
 ## 🧭 Executive Overview
+
+> **Deployment Architecture:**
+> - **Frontend**: Flutter Web hosted on GitHub Pages (`/Zenith/` base path). Built and published automatically via `.github/workflows/deploy-pages.yml`.
+> - **Backend**: Standalone Dart REST API (`bin/zenith_server.dart` / `Dockerfile` / `render.yaml`) hosting Gemini Vision multimodal processing, deterministic risk calculus, and CORS middleware.
+> - **Configuration**: In GitHub Actions, configure repository variable `API_BASE_URL` with your deployed backend HTTPS URL (e.g. `https://zenith-api.onrender.com`). If not yet configured, the website remains fully interactive in client mode and clearly guides users on live analysis setup.
 
 **Zenith** is an enterprise-grade visual operational security (OPSEC) evaluation engine engineered to analyze photos and visual media through the perspective of an **adversarial open-source intelligence (OSINT) investigator**. 
 
@@ -61,7 +67,7 @@ graph TD
     subgraph Verification & Sandbox
         RedactSandbox["Interactive Redaction Sandbox"]
         Rescan["Stage 7: Rescan Verification Engine (/v1/rescan)"]
-        AuditLog["Persistent Forensic Audit Store"]
+    AuditLog["Visitor-local browser history"]
     end
 
     Web --> Ingest
@@ -164,9 +170,9 @@ The Android app features a built-in **Backend Connectivity & Diagnostics** manag
 ## 💻 Local Development & Quickstart
 
 ### Prerequisites
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.47.5+
-- [Dart SDK](https://dart.dev/get-dart) 3.13.4+
-- [Node.js](https://nodejs.org/) v18+ (for local web proxy server)
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.47.7
+- [Dart SDK](https://dart.dev/get-dart) 3.13.5
+- Node.js v18+ (only for the optional local web proxy)
 
 ### 1. Clone & Setup
 ```bash
@@ -176,17 +182,17 @@ flutter pub get
 npm install
 ```
 
-### 2. Configure Environment (Optional for Live Gemini API)
+### 2. Configure the local backend (optional)
 Create a `.env` file in the root directory:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-3.8-flash
 ```
-*(If no API key is set, Zenith automatically uses its calibrated heuristic engine and test harness!)*
+Without `GEMINI_API_KEY`, real analysis returns a structured configuration error. Mock providers are used by tests only.
 
 ### 3. Run Automated Tests
 ```bash
-# Run all unit, integration, and benchmark tests (72 passing tests)
+# Run all unit, integration, and benchmark tests
 flutter test
 
 # Run the 120-case calibrated benchmark suite specifically
@@ -200,13 +206,39 @@ dart run bin/zenith_server.dart --port 8080
 
 ### 5. Run the Web Dashboard Locally
 ```bash
-# Build web release
-npm run build
-
-# Start local server with backend proxying
-npm start
-# Open http://localhost:8000 in your browser
+# Run the web app in debug mode with the local backend URL
+flutter run -d chrome --web-port=8000 --dart-define=BACKEND_URL=http://localhost:8080
 ```
+
+## 🚀 Production Deployment
+
+The project uses two independent deployments: Flutter Web on GitHub Pages and the Dart API on Render. GitHub Pages cannot run the Dart server. The checked-in API URL is intentionally empty; do not put a Gemini key in a GitHub variable, Flutter define, or web asset.
+
+### GitHub Pages frontend
+
+`.github/workflows/deploy-pages.yml` pins Flutter 3.47.7, runs `flutter pub get`, `flutter analyze`, and `flutter test`, builds with `--base-href /Zenith/`, and deploys `build/web` using the Pages artifact actions. In GitHub, open **Settings → Pages → Build and deployment**, choose **GitHub Actions**. After deploying the backend, add a repository Actions variable named `API_BASE_URL` (or `ZENITH_API_BASE_URL`) with the service's HTTPS origin (for example, `https://your-service.onrender.com`, without a trailing slash). Then rerun the workflow. If this variable is absent, the site still loads, but uploads show a clear “live analysis not configured” message.
+
+The backend URL is public configuration; it is not a credential. Never place `GEMINI_API_KEY` in GitHub Pages settings, Actions variables, `--dart-define`, or frontend code.
+
+### Dart backend on Render
+
+1. In Render, create a **Blueprint** from this repository and select `render.yaml`. The blueprint builds the included `Dockerfile`, installs Flutter 3.47.7 / Dart 3.13.5, starts `dart run bin/zenith_server.dart`, binds the platform `PORT` on all interfaces, and checks `/health`.
+2. Add `GEMINI_API_KEY` as a secret environment variable in Render. Set `GEMINI_MODEL` to `gemini-3.8-flash` (the current Gemini API model name used here). Never commit or share this value.
+3. Wait for the service to deploy. Verify `https://<service-host>/health` returns JSON with `status: healthy`, `provider: gemini`, and `geminiConfigured: true`. A health response only confirms the key is present; it does not verify a real image analysis or quota.
+4. Copy the HTTPS service origin into the GitHub Actions variable above and rerun the Pages workflow.
+5. The Render blueprint restricts browser CORS to `https://siddhant-dev10.github.io`. Update `ZENITH_ALLOWED_ORIGINS` if the frontend uses another origin. Analysis is limited to 20 requests per IP per minute; the API is public, so monitor usage and configure an upstream gateway if stronger abuse controls are required.
+
+Render's container filesystem is ephemeral. Image analyses and server audit history are not persisted: the server deliberately disables audit listing and historical analysis retrieval to prevent cross-user exposure. Browser history remains in that visitor's local app storage. Benchmark case/run files are operational data and can reset after redeploy; use a separately secured durable database only if shared persistence becomes a requirement. Uploaded image bytes are processed in memory and are not intentionally retained by the analysis endpoint.
+
+### Troubleshooting
+
+- **The page opens, but analysis says it is not configured:** Set the GitHub Actions repository variable `ZENITH_API_BASE_URL`, then run the Pages workflow again.
+- **The health check cannot load:** Confirm the Render service is running, the API URL uses HTTPS, and `ZENITH_ALLOWED_ORIGINS` includes the GitHub Pages origin.
+- **Health says `geminiConfigured: false`:** Set Render's `GEMINI_API_KEY` secret and redeploy.
+- **Analysis returns credentials, quota, or provider errors:** Check the backend's Render logs and Google AI Studio quota/key settings. The browser receives a safe structured error; provider response bodies and keys are not returned to it.
+- **Analysis times out or the network is unavailable:** Retry from the analysis screen. The app does not invent a successful result when the API fails.
+
+The workflow and backend container configuration have been added locally. Production is not verified until these manual GitHub/Render setup steps are complete and a real image request succeeds. Automated tests use mock providers; they do not make a live Gemini request.
 
 ---
 

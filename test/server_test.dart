@@ -88,6 +88,32 @@ void main() {
       expect(body['version'], '1.0.0');
     });
 
+    test('ZenithHttpClient.checkHealth succeeds against live server', () async {
+      final health = await apiClient.checkHealth();
+      expect(health['status'], 'healthy');
+      expect(health['service'], 'zenith-privacy-intelligence-engine');
+      expect(health['version'], '1.0.0');
+    });
+
+    test('OPTIONS preflight allows the GitHub Pages origin', () async {
+      final request = http.Request('OPTIONS', Uri.parse('$baseUrl/v1/analyze'))
+        ..headers['Origin'] = 'https://siddhant-dev10.github.io';
+      final corsResponse = await request.send().then(http.Response.fromStream);
+      expect(corsResponse.statusCode, HttpStatus.noContent);
+      expect(
+        corsResponse.headers['access-control-allow-origin'],
+        'https://siddhant-dev10.github.io',
+      );
+    });
+
+    test('OPTIONS preflight rejects an unconfigured browser origin', () async {
+      final request = http.Request('OPTIONS', Uri.parse('$baseUrl/v1/analyze'))
+        ..headers['Origin'] = 'https://untrusted.example';
+      final response = await request.send().then(http.Response.fromStream);
+      expect(response.statusCode, HttpStatus.forbidden);
+      expect(response.headers['access-control-allow-origin'], isNull);
+    });
+
     test(
       'POST /v1/analyze processes valid image and returns complete contract',
       () async {
@@ -180,6 +206,15 @@ void main() {
       expect(problem['type'], contains('validation-failed'));
     });
 
+    test('OPTIONS preflight includes Access-Control-Max-Age and Accept headers', () async {
+      final request = http.Request('OPTIONS', Uri.parse('$baseUrl/v1/analyze'))
+        ..headers['Origin'] = 'https://siddhant-dev10.github.io';
+      final corsResponse = await request.send().then(http.Response.fromStream);
+      expect(corsResponse.statusCode, HttpStatus.noContent);
+      expect(corsResponse.headers['access-control-max-age'], '86400');
+      expect(corsResponse.headers['access-control-allow-headers'], contains('Accept'));
+    });
+
     test(
       'POST /v1/rescan verifies sanitized photograph risk reduction',
       () async {
@@ -260,13 +295,11 @@ void main() {
         anyOf(equals('completed'), equals('partial_failure')),
       );
 
-      // Verify GET /api/v1/analyses/:id retrieves this analysis
+      // The server intentionally does not retain analysis records.
       final getAnalysisRes = await http.get(
         Uri.parse('$baseUrl/api/v1/analyses/${response.analysisId}'),
       );
-      expect(getAnalysisRes.statusCode, HttpStatus.ok);
-      final fetched = jsonDecode(getAnalysisRes.body) as Map<String, dynamic>;
-      expect(fetched['analysisId'], response.analysisId);
+      expect(getAnalysisRes.statusCode, HttpStatus.notFound);
     });
 
     test('GET /api/v1/test-cases returns all 20 seeded threat benchmark test cases', () async {
@@ -330,24 +363,10 @@ void main() {
       expect(allRuns.any((r) => (r as Map)['runId'] == run['runId']), true);
     });
 
-    test('GET /v1/audits returns persisted audit records', () async {
-      // 1. Submit an analysis first
-      final analyzeRes = await http.post(
-        Uri.parse('$baseUrl/v1/analyze'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'image': base64Encode(validPngBytes),
-          'sensitivityProfile': 'balanced',
-        }),
-      );
-      expect(analyzeRes.statusCode, HttpStatus.ok);
-
-      // 2. Query /v1/audits
+    test('GET /v1/audits is disabled to prevent cross-user exposure', () async {
       final auditsRes = await http.get(Uri.parse('$baseUrl/v1/audits'));
-      expect(auditsRes.statusCode, HttpStatus.ok);
-      final audits = jsonDecode(auditsRes.body) as List;
-      expect(audits.isNotEmpty, true);
-      expect((audits.first as Map)['analysisId'], isNotEmpty);
+      expect(auditsRes.statusCode, HttpStatus.forbidden);
+      expect(jsonDecode(auditsRes.body)['title'], 'Audit History Unavailable');
     });
 
     test('Server with UnconfiguredVisionProvider returns HTTP 503 missing-credentials instead of mock 43', () async {
@@ -379,7 +398,7 @@ void main() {
         expect(problem['title'], 'Gemini Credentials Required');
         expect(
           problem['detail'],
-          contains('GEMINI_API_KEY environment variable is not configured'),
+          contains('configure GEMINI_API_KEY on the backend'),
         );
       } finally {
         await unconfiguredServer.close(force: true);

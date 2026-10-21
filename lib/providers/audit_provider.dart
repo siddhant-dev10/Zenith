@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -149,7 +150,7 @@ class AuditNotifier extends Notifier<AuditState> {
 
   IZenithClient get apiClient {
     final settings = ref.read(settingsProvider);
-    if (settings.useRemoteBackend) {
+    if (kIsWeb || settings.useRemoteBackend) {
       return ZenithHttpClient(baseUrl: settings.backendUrl);
     }
     return ZenithLocalClient();
@@ -284,6 +285,7 @@ class AuditNotifier extends Notifier<AuditState> {
   }
 
   Future<PrivacyAuditReport?> runAnalysis() async {
+    if (state.isScanning) return null;
     final bytes = state.selectedImageBytes;
     if (bytes == null && state.selectedSampleAsset == null) {
       state = state.copyWith(
@@ -321,7 +323,7 @@ class AuditNotifier extends Notifier<AuditState> {
       PrivacyAuditReport report;
 
       // Determine backend routing: Remote REST Backend vs Local Intelligence Pipeline
-      if (settings.useRemoteBackend) {
+      if (kIsWeb || settings.useRemoteBackend) {
         final client = ZenithHttpClient(baseUrl: settings.backendUrl);
         final response = await client
             .analyzeImage(
@@ -442,10 +444,7 @@ class AuditNotifier extends Notifier<AuditState> {
       return null;
     } catch (e) {
       final cleanMsg = e.toString().replaceFirst('Exception: ', '');
-      state = state.copyWith(
-        status: ScanStatus.error,
-        errorMessage: cleanMsg,
-      );
+      state = state.copyWith(status: ScanStatus.error, errorMessage: cleanMsg);
       return null;
     }
   }

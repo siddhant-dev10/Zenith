@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -127,16 +129,34 @@ class _ImageAnalyzerTabState extends ConsumerState<ImageAnalyzerTab> {
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(
-                            'Endpoint: ${settings.backendUrl}',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              color: isDark ? AppColors.textWhite : AppColors.textDark,
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const SettingsScreen(),
+                                ),
+                              );
+                            },
+                            child: Text(
+                              settings.backendUrl.isNotEmpty
+                                  ? 'Endpoint: ${settings.backendUrl}'
+                                  : 'Endpoint: Not configured (Tap to configure)',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                color: settings.backendUrl.isNotEmpty
+                                    ? (isDark
+                                          ? AppColors.textWhite
+                                          : AppColors.textDark)
+                                    : AppColors.primaryCyan,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (settings.backendUrl != ApiConfig.defaultLanUrl) ...[
+                        if (!kIsWeb &&
+                            Platform.isAndroid &&
+                            settings.backendUrl != ApiConfig.defaultLanUrl) ...[
                           const SizedBox(width: 6),
                           InkWell(
                             onTap: () async {

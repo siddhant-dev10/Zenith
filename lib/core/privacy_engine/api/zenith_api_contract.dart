@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -310,6 +311,7 @@ abstract class IZenithClient {
   Future<RescanVerificationResponse> verifyRescan(
     RescanVerificationRequest request,
   );
+  Future<Map<String, dynamic>> checkHealth();
 
   // Test-case library & evaluation framework endpoints
   Future<List<ZenithTestCaseRecord>> getTestCases();
@@ -404,6 +406,21 @@ class ZenithLocalClient implements IZenithClient {
   Future<ZenithTestRunRecord?> getTestRun(String runId) async {
     return _testRunRepo.getRunById(runId);
   }
+
+  @override
+  Future<Map<String, dynamic>> checkHealth() async {
+    return {
+      'status': 'healthy',
+      'service': 'zenith-privacy-intelligence-engine',
+      'version': '1.0.0',
+      'geminiConfigured':
+          _pipeline.visionProvider is! UnconfiguredVisionProvider,
+      'provider': _pipeline.visionProvider is GeminiVisionProvider
+          ? 'gemini'
+          : 'mock',
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+  }
 }
 
 /// Remote HTTP implementation of the Zenith API client, allowing external
@@ -416,9 +433,85 @@ class ZenithHttpClient implements IZenithClient {
   ZenithHttpClient({required this.baseUrl, http.Client? client})
     : _client = client ?? http.Client();
 
+  Uri _endpoint(String path) {
+    final normalized = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (normalized.isEmpty) {
+      throw Exception(
+        'Live analysis is not configured for this website. The site owner must set the production API URL and redeploy.',
+      );
+    }
+    final uri = Uri.tryParse('$normalized$path');
+    if (uri == null || !uri.hasAuthority || uri.host.isEmpty) {
+      throw Exception('The configured Zenith API URL is invalid.');
+    }
+    final isProductionWeb =
+        (Uri.base.scheme == 'http' || Uri.base.scheme == 'https') &&
+        const bool.fromEnvironment('dart.vm.product');
+    if (isProductionWeb && uri.scheme != 'https') {
+      throw Exception('The production Zenith API must use HTTPS.');
+    }
+    if (isProductionWeb &&
+        (uri.host == 'localhost' ||
+            uri.host == '127.0.0.1' ||
+            uri.host == '::1')) {
+      throw Exception(
+        'This website is configured to use localhost, which points to your device. The site owner must configure and deploy a public HTTPS API URL.',
+      );
+    }
+    return uri;
+  }
+
+  Future<http.Response> _send(Future<http.Response> request) =>
+      request.timeout(const Duration(seconds: 60));
+
+  String _apiError(http.Response response, String feature) {
+    String? title;
+    String? detail;
+    try {
+      final payload = jsonDecode(response.body);
+      if (payload is Map) {
+        title = payload['title']?.toString();
+        detail = payload['detail']?.toString();
+      }
+    } catch (_) {}
+    final message = switch (response.statusCode) {
+      400 || 415 || 422 => detail ?? title ?? 'The image could not be validated. Choose a supported image and try again.',
+      401 || 503 => detail != null && detail.isNotEmpty
+          ? '$detail (contact the site owner)'
+          : 'Live image analysis is not configured on the server. Please contact the site owner.',
+      429 => 'The analysis service is busy or its quota is exhausted. Please wait and retry.',
+      >= 500 =>
+        detail ?? title ?? 'The analysis service encountered an error (${response.statusCode}). Please retry shortly.',
+      _ => detail ?? title ?? 'The server rejected the $feature request.',
+    };
+    return 'Zenith $feature unavailable (${response.statusCode}): $message';
+  }
+
+  Map<String, dynamic> _decodeResponse(
+    http.Response response,
+    String feature, {
+    String requiredIdField = 'analysisId',
+    bool requiresRiskAssessment = true,
+  }) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic> ||
+          decoded[requiredIdField] is! String ||
+          (decoded[requiredIdField] as String).isEmpty ||
+          (requiresRiskAssessment && decoded['riskAssessment'] is! Map)) {
+        throw const FormatException('Required response fields are missing.');
+      }
+      return decoded;
+    } catch (_) {
+      throw Exception(
+        'Zenith $feature unavailable: the server returned an invalid response. Please retry or contact the site owner.',
+      );
+    }
+  }
+
   @override
   Future<AnalyzeImageResponse> analyzeImage(AnalyzeImageRequest request) async {
-    final uri = Uri.parse('$baseUrl/v1/analyze');
+    final uri = _endpoint('/v1/analyze');
     final payload = {
       'image': base64Encode(request.imageBytes),
       'clientRequestId': request.clientRequestId,
@@ -427,23 +520,29 @@ class ZenithHttpClient implements IZenithClient {
     };
 
     try {
-      final response = await _client.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(payload),
+      final response = await _send(
+        _client.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        ),
       );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final data = _decodeResponse(response, 'analysis');
         return AnalyzeImageResponse.fromJson(data);
       } else {
-        throw Exception(
-          'Zenith API Error (${response.statusCode}): ${response.body}',
-        );
+        throw Exception(_apiError(response, 'analysis'));
       }
     } catch (e) {
-      if (e is Exception && e.toString().contains('Zenith API Error')) {
+      if (e is Exception &&
+          e.toString().contains('Zenith analysis unavailable')) {
         rethrow;
+      }
+      if (e is TimeoutException) {
+        throw Exception(
+          'The analysis service timed out. Check your connection and retry.',
+        );
       }
       throw Exception(ApiConfig.diagnoseConnectionError(e, uri.toString()));
     }
@@ -453,30 +552,41 @@ class ZenithHttpClient implements IZenithClient {
   Future<RescanVerificationResponse> verifyRescan(
     RescanVerificationRequest request,
   ) async {
-    final uri = Uri.parse('$baseUrl/v1/rescan');
+    final uri = _endpoint('/v1/rescan');
     final payload = {
       'originalAnalysisId': request.originalAnalysisId,
       'redactedImage': base64Encode(request.redactedImageBytes),
     };
 
     try {
-      final response = await _client.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(payload),
+      final response = await _send(
+        _client.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        ),
       );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final data = _decodeResponse(
+          response,
+          'rescan',
+          requiredIdField: 'rescanId',
+          requiresRiskAssessment: false,
+        );
         return RescanVerificationResponse.fromJson(data);
       } else {
-        throw Exception(
-          'Zenith Rescan API Error (${response.statusCode}): ${response.body}',
-        );
+        throw Exception(_apiError(response, 'rescan'));
       }
     } catch (e) {
-      if (e is Exception && e.toString().contains('Zenith Rescan API Error')) {
+      if (e is Exception &&
+          e.toString().contains('Zenith rescan unavailable')) {
         rethrow;
+      }
+      if (e is TimeoutException) {
+        throw Exception(
+          'The rescan service timed out. Check your connection and retry.',
+        );
       }
       throw Exception(ApiConfig.diagnoseConnectionError(e, uri.toString()));
     }
@@ -484,8 +594,8 @@ class ZenithHttpClient implements IZenithClient {
 
   @override
   Future<List<ZenithTestCaseRecord>> getTestCases() async {
-    final uri = Uri.parse('$baseUrl/api/v1/test-cases');
-    final response = await _client.get(uri);
+    final uri = _endpoint('/api/v1/test-cases');
+    final response = await _send(_client.get(uri));
     if (response.statusCode == 200) {
       final list = jsonDecode(response.body) as List;
       return list
@@ -501,8 +611,8 @@ class ZenithHttpClient implements IZenithClient {
 
   @override
   Future<ZenithTestCaseRecord?> getTestCase(String id) async {
-    final uri = Uri.parse('$baseUrl/api/v1/test-cases/$id');
-    final response = await _client.get(uri);
+    final uri = _endpoint('/api/v1/test-cases/${Uri.encodeComponent(id)}');
+    final response = await _send(_client.get(uri));
     if (response.statusCode == 200) {
       return ZenithTestCaseRecord.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>,
@@ -515,12 +625,14 @@ class ZenithHttpClient implements IZenithClient {
 
   @override
   Future<ZenithTestRunRecord> executeTestRun({List<String>? caseIds}) async {
-    final uri = Uri.parse('$baseUrl/api/v1/test-runs');
+    final uri = _endpoint('/api/v1/test-runs');
     final payload = caseIds != null ? {'caseIds': caseIds} : {};
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
+    final response = await _send(
+      _client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ),
     );
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return ZenithTestRunRecord.fromJson(
@@ -532,8 +644,8 @@ class ZenithHttpClient implements IZenithClient {
 
   @override
   Future<List<ZenithTestRunRecord>> getTestRuns() async {
-    final uri = Uri.parse('$baseUrl/api/v1/test-runs');
-    final response = await _client.get(uri);
+    final uri = _endpoint('/api/v1/test-runs');
+    final response = await _send(_client.get(uri));
     if (response.statusCode == 200) {
       final list = jsonDecode(response.body) as List;
       return list
@@ -549,8 +661,8 @@ class ZenithHttpClient implements IZenithClient {
 
   @override
   Future<ZenithTestRunRecord?> getTestRun(String runId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/test-runs/$runId');
-    final response = await _client.get(uri);
+    final uri = _endpoint('/api/v1/test-runs/${Uri.encodeComponent(runId)}');
+    final response = await _send(_client.get(uri));
     if (response.statusCode == 200) {
       return ZenithTestRunRecord.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>,
@@ -559,5 +671,28 @@ class ZenithHttpClient implements IZenithClient {
       return null;
     }
     throw Exception('Failed to load test run $runId: ${response.statusCode}');
+  }
+
+  @override
+  Future<Map<String, dynamic>> checkHealth() async {
+    final uri = _endpoint('/health');
+    try {
+      final response = await _send(_client.get(uri));
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+      }
+      throw Exception(
+        'Server health check returned HTTP ${response.statusCode}',
+      );
+    } catch (e) {
+      if (e is Exception &&
+          e.toString().contains('Live analysis is not configured')) {
+        rethrow;
+      }
+      throw Exception(ApiConfig.diagnoseConnectionError(e, uri.toString()));
+    }
   }
 }

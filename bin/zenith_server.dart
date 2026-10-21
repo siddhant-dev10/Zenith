@@ -242,6 +242,30 @@ Future<void> handleRequest(
 
   try {
     // 1. Health check
+    if (request.method == 'GET' && path == '/ready') {
+      final isConfigured =
+          pipeline.visionProvider is! UnconfiguredVisionProvider;
+      res.statusCode = isConfigured
+          ? HttpStatus.ok
+          : HttpStatus.serviceUnavailable;
+      res.headers.contentType = ContentType.json;
+      res.write(
+        jsonEncode({
+          'status': isConfigured ? 'ready' : 'not_ready',
+          'ready': isConfigured,
+          'providerConfigured': isConfigured,
+          'provider': pipeline.visionProvider is GeminiVisionProvider
+              ? 'gemini'
+              : (isConfigured ? 'mock' : 'unconfigured'),
+          if (!isConfigured)
+            'detail':
+                'Live image analysis requires GEMINI_API_KEY on the backend.',
+        }),
+      );
+      await res.close();
+      return;
+    }
+
     if (request.method == 'GET' &&
         (path == '/' || path == '/health' || path == '/api/v1/health')) {
       res.statusCode = HttpStatus.ok;
@@ -250,7 +274,12 @@ Future<void> handleRequest(
           pipeline.visionProvider is! UnconfiguredVisionProvider;
       res.write(
         jsonEncode({
-          'status': 'healthy',
+          // Keep liveness healthy for the host's restart monitor while clearly
+          // reporting that live analysis is degraded until credentials exist.
+          'status': isConfigured ? 'healthy' : 'degraded',
+          'serverStatus': 'healthy',
+          'analysisReady': isConfigured,
+          'providerConfigured': isConfigured,
           'service': 'zenith-privacy-intelligence-engine',
           'version': '1.0.0',
           'geminiConfigured': isConfigured,
@@ -412,10 +441,15 @@ Future<void> handleRequest(
           requestId: clientRequestId,
         );
       } on VisionProviderException catch (e) {
+        final isAuthOrConfig =
+            pipeline.visionProvider is UnconfiguredVisionProvider;
         final status = e.isRateLimit
             ? HttpStatus.tooManyRequests
-            : (e.statusCode ?? HttpStatus.badGateway);
-        final isAuthOrConfig = status == HttpStatus.serviceUnavailable;
+            : (isAuthOrConfig
+                  ? HttpStatus.serviceUnavailable
+                  : (e.statusCode != null && e.statusCode! < 500
+                        ? e.statusCode!
+                        : HttpStatus.badGateway));
         final isInvalidCredential =
             status == HttpStatus.badRequest ||
             status == HttpStatus.unauthorized ||

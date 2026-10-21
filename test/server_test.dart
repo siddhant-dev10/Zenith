@@ -84,9 +84,25 @@ void main() {
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       expect(body['status'], 'healthy');
+      expect(body['serverStatus'], 'healthy');
+      expect(body['analysisReady'], true);
+      expect(body['providerConfigured'], true);
       expect(body['service'], 'zenith-privacy-intelligence-engine');
       expect(body['version'], '1.0.0');
     });
+
+    test(
+      'GET /ready reports provider readiness independently of liveness',
+      () async {
+        final response = await http.get(Uri.parse('$baseUrl/ready'));
+        expect(response.statusCode, HttpStatus.ok);
+
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        expect(body['status'], 'ready');
+        expect(body['ready'], true);
+        expect(body['providerConfigured'], true);
+      },
+    );
 
     test('ZenithHttpClient.checkHealth succeeds against live server', () async {
       final health = await apiClient.checkHealth();
@@ -380,6 +396,25 @@ void main() {
       );
 
       try {
+        final readiness = await http.get(
+          Uri.parse('http://127.0.0.1:${unconfiguredServer.port}/ready'),
+        );
+        expect(readiness.statusCode, HttpStatus.serviceUnavailable);
+        final readinessBody =
+            jsonDecode(readiness.body) as Map<String, dynamic>;
+        expect(readinessBody['status'], 'not_ready');
+        expect(readinessBody['ready'], false);
+        expect(readinessBody['providerConfigured'], false);
+
+        final health = await http.get(
+          Uri.parse('http://127.0.0.1:${unconfiguredServer.port}/health'),
+        );
+        expect(health.statusCode, HttpStatus.ok);
+        final healthBody = jsonDecode(health.body) as Map<String, dynamic>;
+        expect(healthBody['status'], 'degraded');
+        expect(healthBody['serverStatus'], 'healthy');
+        expect(healthBody['analysisReady'], false);
+
         final res = await http.post(
           Uri.parse('http://127.0.0.1:${unconfiguredServer.port}/v1/analyze'),
           headers: {'Content-Type': 'application/json'},
@@ -404,5 +439,63 @@ void main() {
         await unconfiguredServer.close(force: true);
       }
     });
+
+    test(
+      'upstream Gemini HTTP 503 is not mislabeled as missing credentials',
+      () async {
+        final upstreamFailureServer = await startZenithServer(
+          port: 0,
+          pipeline: ZenithAnalysisPipeline(
+            visionProvider: _FailingVisionProvider(
+              const VisionProviderException(
+                'upstream unavailable',
+                statusCode: HttpStatus.serviceUnavailable,
+              ),
+            ),
+          ),
+          address: InternetAddress.loopbackIPv4,
+        );
+
+        try {
+          final res = await http.post(
+            Uri.parse(
+              'http://127.0.0.1:${upstreamFailureServer.port}/v1/analyze',
+            ),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'image': base64Encode(validPngBytes),
+              'sensitivityProfile': 'balanced',
+            }),
+          );
+
+          expect(res.statusCode, HttpStatus.badGateway);
+          final problem = jsonDecode(res.body) as Map<String, dynamic>;
+          expect(
+            problem['type'],
+            'https://zenith.privacy/errors/vision-provider-failed',
+          );
+          expect(problem['title'], 'Vision Provider Failed');
+          expect(problem['detail'], isNot(contains('GEMINI_API_KEY')));
+        } finally {
+          await upstreamFailureServer.close(force: true);
+        }
+      },
+    );
   });
+}
+
+class _FailingVisionProvider implements IVisionAnalysisProvider {
+  final Exception failure;
+
+  _FailingVisionProvider(this.failure);
+
+  @override
+  Future<VisionAnalysisRawResult> analyze({
+    required Uint8List imageBytes,
+    required String mimeType,
+    String? sensitivity,
+    String? model,
+  }) async {
+    throw failure;
+  }
 }

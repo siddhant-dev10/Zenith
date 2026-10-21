@@ -323,7 +323,8 @@ class AuditNotifier extends Notifier<AuditState> {
       PrivacyAuditReport report;
 
       // Determine backend routing: Remote REST Backend vs Local Intelligence Pipeline
-      if (kIsWeb || settings.useRemoteBackend) {
+      final hasBackend = settings.backendUrl.trim().isNotEmpty;
+      if (hasBackend) {
         final client = ZenithHttpClient(baseUrl: settings.backendUrl);
         final response = await client
             .analyzeImage(

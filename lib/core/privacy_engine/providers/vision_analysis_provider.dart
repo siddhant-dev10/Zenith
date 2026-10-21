@@ -95,7 +95,7 @@ class GeminiVisionProvider implements IVisionAnalysisProvider {
 
   GeminiVisionProvider({
     required this.apiKey,
-    this.model = 'gemini-3.8-flash',
+    this.model = 'gemini-3.5-flash-lite',
     http.Client? httpClient,
   }) : _httpClient = httpClient ?? http.Client();
 

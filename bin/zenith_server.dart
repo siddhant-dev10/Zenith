@@ -126,7 +126,7 @@ void main(List<String> args) async {
   final model =
       Platform.environment['GEMINI_MODEL'] ??
       dotEnv['GEMINI_MODEL'] ??
-      'gemini-3.8-flash';
+      'gemini-3.5-flash-lite';
 
   final IVisionAnalysisProvider provider;
   if (apiKey != null && apiKey.trim().isNotEmpty) {

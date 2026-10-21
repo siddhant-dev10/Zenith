@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "start": "node scripts/serve.js",
-    "dev": "flutter run -d chrome --web-port=8000",
+    "dev": "node scripts/dev.js",
+    "dev:frontend": "flutter run -d chrome --web-port=8000",
     "serve": "node scripts/serve.js",
     "backend": "dart run bin/zenith_server.dart",
     "build": "flutter build web",

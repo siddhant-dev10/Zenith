@@ -40,8 +40,11 @@ class ApiConfig {
 
     // 2. Web platform
     if (_isWeb) {
-      // A browser visitor's localhost is their own machine. Never silently
-      // direct a deployed web build to a developer's local server.
+      // In local development (localhost / 127.0.0.1), default to local backend for zero-config dev.
+      // On deployed production sites (e.g. GitHub Pages), return '' to avoid routing visitors to localhost.
+      if (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') {
+        return defaultLocalhostUrl;
+      }
       return '';
     }
 

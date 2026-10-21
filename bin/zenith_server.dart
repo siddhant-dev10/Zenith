@@ -13,6 +13,26 @@ import 'package:zenith/core/privacy_engine/validation/image_validator.dart';
 final Map<String, List<DateTime>> _analysisRequestsByAddress = {};
 final Map<String, DateTime> _lastTestRunByAddress = {};
 
+class _RequestBodyTooLarge implements Exception {
+  const _RequestBodyTooLarge();
+}
+
+Future<String> _readRequestBody(HttpRequest request, int maxBytes) async {
+  final body = BytesBuilder(copy: false);
+  var receivedBytes = 0;
+  var exceededLimit = false;
+  await for (final chunk in request) {
+    receivedBytes += chunk.length;
+    if (receivedBytes > maxBytes) {
+      exceededLimit = true;
+    } else if (!exceededLimit) {
+      body.add(chunk);
+    }
+  }
+  if (exceededLimit) throw const _RequestBodyTooLarge();
+  return utf8.decode(body.takeBytes());
+}
+
 String _clientAddress(HttpRequest request) {
   final forwardedFor = request.headers.value('X-Forwarded-For');
   final clientAddress = forwardedFor?.split(',').first.trim();
@@ -285,7 +305,20 @@ Future<void> handleRequest(
         );
         return;
       }
-      final bodyStr = await utf8.decodeStream(request);
+      final String bodyStr;
+      try {
+        bodyStr = await _readRequestBody(request, maxPayloadBytes);
+      } on _RequestBodyTooLarge {
+        _sendError(
+          res,
+          HttpStatus.requestEntityTooLarge,
+          type: 'https://zenith.privacy/errors/payload-too-large',
+          title: 'Payload Too Large',
+          detail: 'Request body exceeds the maximum permitted size of 35MB.',
+          instance: path,
+        );
+        return;
+      }
       final Map<String, dynamic> body;
       try {
         body = jsonDecode(bodyStr) as Map<String, dynamic>;

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: zenith-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: ZENITH_ALLOWED_ORIGINS
+        value: https://siddhant-dev10.github.io
